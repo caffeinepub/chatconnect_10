@@ -1,0 +1,83 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@200;400;600;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Page background: very light gray-blue */
+    --background: 0.96 0.008 250;
+    --foreground: 0.15 0.01 260;
+
+    --card: 1 0 0;
+    --card-foreground: 0.15 0.01 260;
+
+    --popover: 1 0 0;
+    --popover-foreground: 0.15 0.01 260;
+
+    /* Primary: saturated purple #7C3AED */
+    --primary: 0.55 0.25 290;
+    --primary-foreground: 1 0 0;
+
+    /* Secondary: light purple */
+    --secondary: 0.94 0.04 290;
+    --secondary-foreground: 0.45 0.15 290;
+
+    --muted: 0.94 0.008 250;
+    --muted-foreground: 0.55 0.02 260;
+
+    --accent: 0.94 0.04 290;
+    --accent-foreground: 0.45 0.15 290;
+
+    --destructive: 0.6 0.22 25;
+    --destructive-foreground: 1 0 0;
+
+    --border: 0.88 0.01 250;
+    --input: 0.88 0.01 250;
+    --ring: 0.55 0.25 290;
+
+    /* Orange accent #F97316 */
+    --orange: 0.72 0.19 50;
+    --orange-foreground: 1 0 0;
+
+    /* Teal #22C7B7 */
+    --teal: 0.74 0.12 192;
+    --teal-foreground: 1 0 0;
+
+    /* Navy #0B102A */
+    --navy: 0.13 0.04 270;
+    --navy-foreground: 0.95 0.01 260;
+
+    --radius: 0.5rem;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    @apply border-border;
+  }
+}
+
+@layer components {
+  .btn-orange {
+    @apply bg-orange text-orange-foreground hover:opacity-90 transition-opacity font-semibold;
+  }
+  .btn-purple {
+    @apply bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold;
+  }
+  .gradient-hero {
+    background: linear-gradient(135deg, #3a1c6e 0%, #2b2f7a 50%, #22c7b7 100%);
+  }
+  .gradient-card {
+    background: linear-gradient(135deg, #0b102a 0%, #14123a 100%);
+  }
+  .gradient-footer {
+    background: linear-gradient(135deg, #0b0f2a 0%, #1a1442 100%);
+  }
+}
