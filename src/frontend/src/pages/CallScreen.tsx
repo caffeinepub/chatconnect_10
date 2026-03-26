@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Mic, MicOff, Phone, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -72,6 +72,29 @@ function playBeep() {
     };
     playTone(880, ctx.currentTime);
     playTone(1000, ctx.currentTime + 0.5);
+  } catch {
+    // AudioContext not available
+  }
+}
+
+function playCallAcceptedSound() {
+  try {
+    const ctx = new AudioContext();
+    const playTone = (freq: number, startTime: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.25, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    // Pleasant 2-tone chime: C5 then E5
+    playTone(523, ctx.currentTime, 0.25);
+    playTone(659, ctx.currentTime + 0.25, 0.25);
   } catch {
     // AudioContext not available
   }
@@ -175,6 +198,7 @@ export default function CallScreen() {
   const { localSession, isLocalLoggedIn } = useLocalAuth();
   const { actor, isFetching: actorFetching } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
+  const queryClient = useQueryClient();
 
   const [timeLeft, setTimeLeft] = useState(CALL_DURATION);
   const [micOn, setMicOn] = useState(true);
@@ -182,6 +206,8 @@ export default function CallScreen() {
   const [callEnded, setCallEnded] = useState(false);
   const beepedRef = useRef(false);
   const callEndedRef = useRef(false);
+  const hangupReceivedRef = useRef(false);
+  const callAcceptedSoundPlayedRef = useRef(false);
   const endCallMutation = useEndCallAsLocal();
 
   // WebRTC refs
@@ -191,6 +217,16 @@ export default function CallScreen() {
   const signalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const webrtcInitialized = useRef(false);
+
+  // Ref to always have latest handleEndCall inside polling closures
+  const handleEndCallRef = useRef<(autoEnd?: boolean) => Promise<void>>(
+    async () => {},
+  );
+
+  // Immediately refetch call requests on mount so WebRTC starts right away
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["localCallRequests"] });
+  }, [queryClient]);
 
   const { data: callRequests = [] } = useGetCallRequestsAsLocal(
     localSession?.token,
@@ -207,6 +243,14 @@ export default function CallScreen() {
   });
 
   const callRequest = callRequests.find((cr) => cr.id.toString() === callId);
+
+  // Play call accepted chime once when callRequest first appears
+  useEffect(() => {
+    if (callRequest && !callAcceptedSoundPlayedRef.current) {
+      callAcceptedSoundPlayedRef.current = true;
+      playCallAcceptedSound();
+    }
+  }, [callRequest]);
 
   const cleanupWebRTC = useCallback(() => {
     if (signalPollRef.current) {
@@ -237,6 +281,23 @@ export default function CallScreen() {
       cleanupWebRTC();
       if (localSession && callRequest) {
         try {
+          // Send hangup signal to other party for instant disconnect
+          const myUsername = localSession.username;
+          const otherUser =
+            myUsername === callRequest.callerUsername
+              ? callRequest.calleeUsername
+              : callRequest.callerUsername;
+          const hangupType = `call-${callId}-hangup`;
+          try {
+            await extActor?.sendSignal(
+              localSession.token,
+              otherUser,
+              hangupType,
+              "1",
+            );
+          } catch {
+            // ignore signal send failure
+          }
           await endCallMutation.mutateAsync({
             token: localSession.token,
             id: callRequest.id,
@@ -252,8 +313,21 @@ export default function CallScreen() {
       }
       setTimeout(() => navigate({ to: "/cards" }), 1200);
     },
-    [localSession, callRequest, endCallMutation, navigate, cleanupWebRTC],
+    [
+      localSession,
+      callRequest,
+      endCallMutation,
+      navigate,
+      cleanupWebRTC,
+      extActor,
+      callId,
+    ],
   );
+
+  // Keep handleEndCallRef current so polling closures always call the latest version
+  useEffect(() => {
+    handleEndCallRef.current = handleEndCall;
+  }, [handleEndCall]);
 
   // Auth guard
   useEffect(() => {
@@ -314,13 +388,20 @@ export default function CallScreen() {
     const offerType = `call-${callId}-offer`;
     const answerType = `call-${callId}-answer`;
     const iceType = `call-${callId}-ice`;
+    const hangupType = `call-${callId}-hangup`;
 
     const setupWebRTC = async () => {
-      // Get mic
+      // Get mic with echo cancellation
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            sampleRate: 48000,
+          },
           video: false,
         });
       } catch (err) {
@@ -407,12 +488,20 @@ export default function CallScreen() {
           toast.error("Failed to send call offer. Check connection.");
         }
 
-        // Poll for answer + ICE
+        // Poll for answer + ICE + hangup
         signalPollRef.current = setInterval(async () => {
           try {
             const signals = await extActor.getMySignals(token);
             for (const s of signals) {
               if (s.fromUsername !== otherUsername) continue;
+              // Check for hangup signal — instant call end
+              if (s.signalType === hangupType) {
+                if (!hangupReceivedRef.current) {
+                  hangupReceivedRef.current = true;
+                  handleEndCallRef.current();
+                }
+                return;
+              }
               if (s.signalType === answerType && !pc.remoteDescription) {
                 const answer = JSON.parse(s.data);
                 await pc.setRemoteDescription(
@@ -435,14 +524,22 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 700);
+        }, 300);
       } else {
-        // Callee: poll for offer, then answer
+        // Callee: poll for offer, then answer + hangup
         signalPollRef.current = setInterval(async () => {
           try {
             const signals = await extActor.getMySignals(token);
             for (const s of signals) {
               if (s.fromUsername !== otherUsername) continue;
+              // Check for hangup signal — instant call end
+              if (s.signalType === hangupType) {
+                if (!hangupReceivedRef.current) {
+                  hangupReceivedRef.current = true;
+                  handleEndCallRef.current();
+                }
+                return;
+              }
               if (s.signalType === offerType && !pc.remoteDescription) {
                 const offer = JSON.parse(s.data);
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -475,7 +572,7 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 700);
+        }, 300);
       }
     };
 
@@ -596,7 +693,7 @@ export default function CallScreen() {
       {/* Bottom: Controls — glassmorphism pill */}
       <div className="z-10 pb-10">
         <div
-          className="flex items-end gap-6 px-8 py-5 rounded-full border border-white/10"
+          className="flex items-end gap-6 px-8 py-5 rounded-3xl border border-white/10"
           style={{
             background: "rgba(255,255,255,0.07)",
             backdropFilter: "blur(20px)",
@@ -604,31 +701,38 @@ export default function CallScreen() {
           }}
           data-ocid="call.card"
         >
-          {/* Mic */}
-          <div className="flex flex-col items-center gap-1.5">
+          {/* Mute/Unmute */}
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={handleToggleMic}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg border-2 ${
                 micOn
-                  ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
-                  : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
+                  ? "bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/50"
+                  : "bg-red-500/80 hover:bg-red-600 text-white border-red-400/60"
               }`}
+              style={
+                micOn
+                  ? { boxShadow: "0 0 16px rgba(34,197,94,0.3)" }
+                  : { boxShadow: "0 0 16px rgba(239,68,68,0.3)" }
+              }
               data-ocid="call.toggle"
             >
               {micOn ? (
-                <Mic className="h-5 w-5" />
+                <Mic className="h-6 w-6" />
               ) : (
-                <MicOff className="h-5 w-5" />
+                <MicOff className="h-6 w-6" />
               )}
             </button>
-            <span className="text-white/40 text-xs">
+            <span
+              className={`text-xs font-semibold ${micOn ? "text-green-400" : "text-red-400"}`}
+            >
               {micOn ? "Mute" : "Unmute"}
             </span>
           </div>
 
           {/* End Call */}
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={() => handleEndCall()}
@@ -639,29 +743,36 @@ export default function CallScreen() {
             >
               <Phone className="h-7 w-7 rotate-[135deg]" />
             </button>
-            <span className="text-white/40 text-xs">End</span>
+            <span className="text-white/50 text-xs font-semibold">End</span>
           </div>
 
-          {/* Speaker */}
-          <div className="flex flex-col items-center gap-1.5">
+          {/* Speaker/Earpiece */}
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={handleToggleSpeaker}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg border-2 ${
                 speakerOn
-                  ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
-                  : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
+                  ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/50"
+                  : "bg-white/5 hover:bg-white/10 text-white/40 border-white/15"
               }`}
+              style={
+                speakerOn
+                  ? { boxShadow: "0 0 16px rgba(59,130,246,0.3)" }
+                  : undefined
+              }
               data-ocid="call.toggle"
             >
               {speakerOn ? (
-                <Volume2 className="h-5 w-5" />
+                <Volume2 className="h-6 w-6" />
               ) : (
-                <VolumeX className="h-5 w-5" />
+                <VolumeX className="h-6 w-6" />
               )}
             </button>
-            <span className="text-white/40 text-xs">
-              {speakerOn ? "Speaker" : "Muted"}
+            <span
+              className={`text-xs font-semibold ${speakerOn ? "text-blue-400" : "text-white/40"}`}
+            >
+              {speakerOn ? "Speaker" : "Earpiece"}
             </span>
           </div>
         </div>

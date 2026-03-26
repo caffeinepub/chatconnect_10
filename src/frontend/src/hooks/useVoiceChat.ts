@@ -243,7 +243,13 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
         video: false,
       });
     } catch (err: unknown) {
@@ -298,11 +304,17 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       return;
     }
 
-    // Request mic permission FIRST
+    // Request mic permission FIRST with echo cancellation
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
         video: false,
       });
     } catch (err: unknown) {
@@ -376,8 +388,8 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       }
     }
 
-    // Poll signals every 1.5s
-    signalPollInterval.current = setInterval(processSignals, 700);
+    // Poll signals every 300ms for faster ICE exchange
+    signalPollInterval.current = setInterval(processSignals, 300);
 
     // Poll participants every 3s
     participantPollInterval.current = setInterval(async () => {

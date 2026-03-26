@@ -207,7 +207,7 @@ export function useGetCallRequestsAsLocal(token: SessionToken | undefined) {
       return extActor.getCallRequestsAsLocal(token);
     },
     enabled: !!extActor && !isFetching && !!token,
-    refetchInterval: 3000,
+    refetchInterval: 1000,
   });
 }
 
