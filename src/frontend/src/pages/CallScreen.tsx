@@ -14,7 +14,7 @@ import {
   useGetCallRequestsAsLocal,
 } from "../hooks/useQueries";
 
-const CALL_DURATION = 20 * 60; // 20 minutes in seconds
+const CALL_DURATION = 20 * 60;
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -22,6 +22,9 @@ const ICE_SERVERS = [
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.services.mozilla.com" },
+  { urls: "stun:stun.stunprotocol.org:3478" },
   { urls: "stun:stun.relay.metered.ca:80" },
   {
     urls: "turn:a.relay.metered.ca:80",
@@ -92,7 +95,6 @@ function playCallAcceptedSound() {
       osc.start(startTime);
       osc.stop(startTime + duration);
     };
-    // Pleasant 2-tone chime: C5 then E5
     playTone(523, ctx.currentTime, 0.25);
     playTone(659, ctx.currentTime + 0.25, 0.25);
   } catch {
@@ -110,7 +112,15 @@ function OtherUserCard({
   username,
   localUsers,
   timeLeft,
-}: { username: string; localUsers: LocalUser[]; timeLeft: number }) {
+  isConnected,
+  connectingCountdown,
+}: {
+  username: string;
+  localUsers: LocalUser[];
+  timeLeft: number;
+  isConnected: boolean;
+  connectingCountdown: number;
+}) {
   const user = localUsers.find((u) => u.username === username);
   const displayName = user?.displayName || username;
   const gradient = getGradient(username);
@@ -124,9 +134,24 @@ function OtherUserCard({
 
   return (
     <div className="flex flex-col items-center gap-6">
+      {/* Connecting countdown */}
+      {!isConnected && (
+        <div className="flex flex-col items-center gap-3 mb-2">
+          <div
+            className="text-7xl font-black text-white tabular-nums"
+            style={{ textShadow: "0 0 30px rgba(250,204,21,0.8)" }}
+          >
+            {connectingCountdown > 0 ? connectingCountdown : "🔊"}
+          </div>
+          <p className="text-yellow-300 text-sm font-semibold tracking-widest uppercase animate-pulse">
+            {connectingCountdown > 0
+              ? "Call starting in..."
+              : "Almost there..."}
+          </p>
+        </div>
+      )}
       {/* Avatar with glowing animated ring */}
       <div className="relative flex items-center justify-center">
-        {/* Outer glow rings */}
         <span
           className="absolute w-52 h-52 rounded-full animate-ping"
           style={{
@@ -142,7 +167,6 @@ function OtherUserCard({
               "0 0 40px 10px rgba(94,234,212,0.25), 0 0 80px 20px rgba(139,92,246,0.15)",
           }}
         />
-        {/* Avatar circle */}
         {user?.photo ? (
           <img
             src={user.photo.getDirectURL()}
@@ -168,22 +192,33 @@ function OtherUserCard({
         <p className="text-white/50 text-base mt-1">@{username}</p>
       </div>
 
-      {/* Live Call badge */}
-      <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-green-500/30 bg-green-500/10">
-        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-        <span className="text-green-400 text-sm font-semibold tracking-wide">
-          Live Call
-        </span>
-      </div>
+      {/* Connection status badge */}
+      {isConnected ? (
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-green-500/30 bg-green-500/10">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-green-400 text-sm font-semibold tracking-wide">
+            Live Call
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-yellow-500/30 bg-yellow-500/10">
+          <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
+          <span className="text-yellow-400 text-sm font-semibold tracking-wide">
+            Connecting...
+          </span>
+        </div>
+      )}
 
-      {/* Timer pill */}
-      <div
-        className={`flex items-center gap-2 px-5 py-2 rounded-full border font-mono font-bold text-2xl tabular-nums transition-colors ${timerColor}`}
-      >
-        {formatTime(timeLeft)}
-      </div>
+      {/* Timer pill — only show when connected */}
+      {isConnected && (
+        <div
+          className={`flex items-center gap-2 px-5 py-2 rounded-full border font-mono font-bold text-2xl tabular-nums transition-colors ${timerColor}`}
+        >
+          {formatTime(timeLeft)}
+        </div>
+      )}
 
-      {timeLeft <= 60 && (
+      {timeLeft <= 60 && isConnected && (
         <p className="text-red-400 text-sm font-semibold animate-pulse">
           ⚠️ Less than 1 minute remaining
         </p>
@@ -204,6 +239,9 @@ export default function CallScreen() {
   const [micOn, setMicOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [callEnded, setCallEnded] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectingCountdown, setConnectingCountdown] = useState(5);
+  const timerStartedRef = useRef(false);
   const beepedRef = useRef(false);
   const callEndedRef = useRef(false);
   const hangupReceivedRef = useRef(false);
@@ -218,12 +256,10 @@ export default function CallScreen() {
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const webrtcInitialized = useRef(false);
 
-  // Ref to always have latest handleEndCall inside polling closures
   const handleEndCallRef = useRef<(autoEnd?: boolean) => Promise<void>>(
     async () => {},
   );
 
-  // Immediately refetch call requests on mount so WebRTC starts right away
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["localCallRequests"] });
   }, [queryClient]);
@@ -244,7 +280,6 @@ export default function CallScreen() {
 
   const callRequest = callRequests.find((cr) => cr.id.toString() === callId);
 
-  // Play call accepted chime once when callRequest first appears
   useEffect(() => {
     if (callRequest && !callAcceptedSoundPlayedRef.current) {
       callAcceptedSoundPlayedRef.current = true;
@@ -281,7 +316,6 @@ export default function CallScreen() {
       cleanupWebRTC();
       if (localSession && callRequest) {
         try {
-          // Send hangup signal to other party for instant disconnect
           const myUsername = localSession.username;
           const otherUser =
             myUsername === callRequest.callerUsername
@@ -296,7 +330,7 @@ export default function CallScreen() {
               "1",
             );
           } catch {
-            // ignore signal send failure
+            // ignore
           }
           await endCallMutation.mutateAsync({
             token: localSession.token,
@@ -324,19 +358,16 @@ export default function CallScreen() {
     ],
   );
 
-  // Keep handleEndCallRef current so polling closures always call the latest version
   useEffect(() => {
     handleEndCallRef.current = handleEndCall;
   }, [handleEndCall]);
 
-  // Auth guard
   useEffect(() => {
     if (!isLocalLoggedIn) {
       navigate({ to: "/login" });
     }
   }, [isLocalLoggedIn, navigate]);
 
-  // If call disappeared (ended by other party), go back
   useEffect(() => {
     if (callRequests.length > 0 && !callRequest && !callEndedRef.current) {
       toast.info("Call ended");
@@ -344,9 +375,8 @@ export default function CallScreen() {
     }
   }, [callRequests, callRequest, navigate]);
 
-  // Timer countdown
   useEffect(() => {
-    if (callEnded) return;
+    if (callEnded || !isConnected) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         const next = prev - 1;
@@ -363,16 +393,38 @@ export default function CallScreen() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [callEnded]);
+  }, [callEnded, isConnected]);
 
-  // Auto end at 0
+  // Reset timer when first connected
+  useEffect(() => {
+    if (isConnected && !timerStartedRef.current) {
+      timerStartedRef.current = true;
+      setTimeLeft(CALL_DURATION);
+    }
+  }, [isConnected]);
+
+  // 5-sec connecting countdown
+  useEffect(() => {
+    if (isConnected || callEnded) return;
+    setConnectingCountdown(5);
+    const interval = setInterval(() => {
+      setConnectingCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isConnected, callEnded]);
+
   useEffect(() => {
     if (timeLeft === 0 && !callEndedRef.current) {
       handleEndCall(true);
     }
   }, [timeLeft, handleEndCall]);
 
-  // WebRTC setup — runs when callRequest becomes available
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs once when callRequest is first available
   useEffect(() => {
     if (!callRequest || !localSession || !extActor || webrtcInitialized.current)
@@ -391,14 +443,13 @@ export default function CallScreen() {
     const hangupType = `call-${callId}-hangup`;
 
     const setupWebRTC = async () => {
-      // Get mic with echo cancellation
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true,
+            autoGainControl: false, // disabled: AGC amplifies echo reflections
             channelCount: 1,
             sampleRate: 48000,
           },
@@ -416,16 +467,16 @@ export default function CallScreen() {
 
       localStreamRef.current = stream;
 
-      // Create peer connection
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 10,
+      });
       pcRef.current = pc;
 
-      // Add local audio tracks
       for (const track of stream.getTracks()) {
         pc.addTrack(track, stream);
       }
 
-      // Remote audio playback
       pc.ontrack = (event) => {
         if (!remoteAudioRef.current) {
           const audio = document.createElement("audio");
@@ -438,14 +489,19 @@ export default function CallScreen() {
         remoteAudioRef.current.play().catch(() => {});
       };
 
-      // Restart ICE on failure
+      // Track real WebRTC connection state — show connected UI only when truly ready
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "failed") {
+        const state = pc.iceConnectionState;
+        if (state === "connected" || state === "completed") {
+          setIsConnected(true);
+        } else if (state === "failed") {
           pc.restartIce();
+          setIsConnected(false);
+        } else if (state === "disconnected") {
+          setIsConnected(false);
         }
       };
 
-      // Send ICE candidates
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
           try {
@@ -474,7 +530,6 @@ export default function CallScreen() {
       };
 
       if (isCaller) {
-        // Caller: create and send offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         try {
@@ -488,13 +543,11 @@ export default function CallScreen() {
           toast.error("Failed to send call offer. Check connection.");
         }
 
-        // Poll for answer + ICE + hangup
         signalPollRef.current = setInterval(async () => {
           try {
             const signals = await extActor.getMySignals(token);
             for (const s of signals) {
               if (s.fromUsername !== otherUsername) continue;
-              // Check for hangup signal — instant call end
               if (s.signalType === hangupType) {
                 if (!hangupReceivedRef.current) {
                   hangupReceivedRef.current = true;
@@ -524,15 +577,13 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 300);
+        }, 100);
       } else {
-        // Callee: poll for offer, then answer + hangup
         signalPollRef.current = setInterval(async () => {
           try {
             const signals = await extActor.getMySignals(token);
             for (const s of signals) {
               if (s.fromUsername !== otherUsername) continue;
-              // Check for hangup signal — instant call end
               if (s.signalType === hangupType) {
                 if (!hangupReceivedRef.current) {
                   hangupReceivedRef.current = true;
@@ -572,26 +623,22 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 300);
+        }, 100);
       }
     };
 
     setupWebRTC();
 
-    return () => {
-      // Cleanup handled by handleEndCall / unmount effect below
-    };
+    return () => {};
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callRequest?.id, localSession?.token, extActor]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanupWebRTC();
     };
   }, [cleanupWebRTC]);
 
-  // Wire mic toggle to actual audio track
   const handleToggleMic = useCallback(() => {
     setMicOn((prev) => {
       const next = !prev;
@@ -603,7 +650,6 @@ export default function CallScreen() {
     });
   }, []);
 
-  // Wire speaker toggle to remote audio element
   const handleToggleSpeaker = useCallback(() => {
     setSpeakerOn((prev) => {
       const next = !prev;
@@ -631,7 +677,6 @@ export default function CallScreen() {
       }}
       data-ocid="call.panel"
     >
-      {/* Animated gradient keyframes */}
       <style>{`
         @keyframes gradientShift {
           0% { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
@@ -639,13 +684,8 @@ export default function CallScreen() {
           66% { background: linear-gradient(135deg, #1a0533 0%, #0c1445 50%, #1a2a3a 100%); }
           100% { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
         }
-        @keyframes ringPulse {
-          0%, 100% { opacity: 0.6; transform: scale(1); }
-          50% { opacity: 0.2; transform: scale(1.08); }
-        }
       `}</style>
 
-      {/* Background decorative blobs */}
       <div
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
         aria-hidden="true"
@@ -666,11 +706,29 @@ export default function CallScreen() {
         />
       </div>
 
-      {/* Top: connected status */}
+      {/* Top status bar */}
       <div className="w-full flex justify-center pt-8 z-10">
-        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 bg-white/5">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-white/70 text-sm font-medium">Connected</span>
+        <div
+          className={`flex items-center gap-2 px-4 py-1.5 rounded-full border ${
+            isConnected
+              ? "border-green-500/30 bg-green-500/10"
+              : "border-yellow-500/30 bg-yellow-500/10"
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isConnected
+                ? "bg-green-400 animate-pulse"
+                : "bg-yellow-400 animate-ping"
+            }`}
+          />
+          <span
+            className={`text-sm font-medium ${
+              isConnected ? "text-green-400" : "text-yellow-400"
+            }`}
+          >
+            {isConnected ? "Connected" : "Connecting..."}
+          </span>
         </div>
       </div>
 
@@ -681,6 +739,8 @@ export default function CallScreen() {
             username={otherUsername}
             localUsers={localUsers}
             timeLeft={timeLeft}
+            isConnected={isConnected}
+            connectingCountdown={connectingCountdown}
           />
         ) : (
           <div className="flex flex-col items-center gap-4">
@@ -690,7 +750,7 @@ export default function CallScreen() {
         )}
       </div>
 
-      {/* Bottom: Controls — glassmorphism pill */}
+      {/* Bottom controls */}
       <div className="z-10 pb-10">
         <div
           className="flex items-end gap-6 px-8 py-5 rounded-3xl border border-white/10"
@@ -725,7 +785,9 @@ export default function CallScreen() {
               )}
             </button>
             <span
-              className={`text-xs font-semibold ${micOn ? "text-green-400" : "text-red-400"}`}
+              className={`text-xs font-semibold ${
+                micOn ? "text-green-400" : "text-red-400"
+              }`}
             >
               {micOn ? "Mute" : "Unmute"}
             </span>
@@ -770,7 +832,9 @@ export default function CallScreen() {
               )}
             </button>
             <span
-              className={`text-xs font-semibold ${speakerOn ? "text-blue-400" : "text-white/40"}`}
+              className={`text-xs font-semibold ${
+                speakerOn ? "text-blue-400" : "text-white/40"
+              }`}
             >
               {speakerOn ? "Speaker" : "Earpiece"}
             </span>

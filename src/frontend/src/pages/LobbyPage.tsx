@@ -30,9 +30,8 @@ import type {
   backendInterface as ExtendedBackend,
   Message,
 } from "../backend.d";
+import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
-import { MessagesButton } from "../components/MessagesButton";
-import { NotificationBell } from "../components/NotificationBell";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
@@ -223,60 +222,14 @@ export default function LobbyPage() {
             )}
           </div>
           <nav className="flex items-center gap-2">
-            <MessagesButton />
-            <Link to="/lobby">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="lobby.tab"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span className="hidden md:block">Lobby</span>
-              </Button>
-            </Link>
-            <Link to="/cards">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.cards_link"
-              >
-                <Users className="h-4 w-4" />
-                <span className="hidden md:block">Calling Cards</span>
-              </Button>
-            </Link>
-            <Link to="/feed">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.feed_link"
-              >
-                <Newspaper className="h-4 w-4" />
-                <span className="hidden md:block">Feed</span>
-              </Button>
-            </Link>
-            <NotificationBell />
-            <Link to="/profile">
-              <Button
-                size="sm"
-                className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:opacity-90 border-0"
-                data-ocid="nav.profile_link"
-              >
-                <UserCircle className="h-4 w-4" />
-                <span className="hidden md:block">My Profile</span>
-              </Button>
-            </Link>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleLogout}
-              className="rounded-full gap-2"
+              className="rounded-full w-9 h-9 p-0"
               data-ocid="lobby.close_button"
             >
               <LogOut className="h-4 w-4" />
-              <span className="hidden md:block">Logout</span>
             </Button>
           </nav>
         </header>
@@ -373,6 +326,25 @@ export default function LobbyPage() {
           </aside>
 
           <main className="flex-1 flex flex-col overflow-hidden">
+            {/* On Mic strip */}
+            {voiceParticipants.some((p) => p.isMicActive) && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border-b border-green-100 overflow-x-auto flex-shrink-0">
+                <span className="text-xs font-semibold text-green-700 flex-shrink-0">
+                  🎙 On mic:
+                </span>
+                {voiceParticipants
+                  .filter((p) => p.isMicActive)
+                  .map((p) => (
+                    <span
+                      key={p.username}
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium flex-shrink-0"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      {p.displayName}
+                    </span>
+                  ))}
+              </div>
+            )}
             <ScrollArea className="flex-1 p-6">
               <AnimatePresence initial={false}>
                 {sortedMessages.length === 0 ? (
@@ -442,9 +414,9 @@ export default function LobbyPage() {
               <div ref={messagesEndRef} />
             </ScrollArea>
 
-            <div className="p-4 border-t border-border bg-white flex-shrink-0">
+            <div className="p-4 pb-6 border-t border-border bg-white flex-shrink-0">
               {/* Voice Controls Row */}
-              <div className="flex items-center gap-2 max-w-3xl mx-auto mb-3">
+              <div className="flex items-center gap-2 max-w-3xl mx-auto mb-2">
                 {!isInChannel ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
@@ -618,6 +590,7 @@ export default function LobbyPage() {
           </main>
         </div>
       </div>
+      <BottomNav />
     </TooltipProvider>
   );
 }

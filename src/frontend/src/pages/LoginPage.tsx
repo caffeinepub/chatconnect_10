@@ -110,7 +110,7 @@ export default function LoginPage() {
                 placeholder="Your username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="login.input"
                 autoComplete="username"
               />
@@ -123,7 +123,7 @@ export default function LoginPage() {
                 placeholder="Your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="login.input"
                 autoComplete="current-password"
               />

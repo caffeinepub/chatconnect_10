@@ -3,8 +3,8 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
-  ArrowLeft,
   Loader2,
+  LogOut,
   MessageCircle,
   Phone,
   PhoneCall,
@@ -13,16 +13,15 @@ import {
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type {
   backendInterface as ExtendedBackend,
   LocalUser,
   User,
 } from "../backend.d";
+import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
-import { MessagesButton } from "../components/MessagesButton";
-import { NotificationBell } from "../components/NotificationBell";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
@@ -245,9 +244,10 @@ function LocalCallingCard({
 export default function CallingCardsPage() {
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
-  const { isLocalLoggedIn, localSession } = useLocalAuth();
+  const { isLocalLoggedIn, localSession, logoutLocal } = useLocalAuth();
   const { actor, isFetching: actorFetching } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
+  const carouselRef = useRef<HTMLDivElement>(null);
   const { data: myProfile, isLoading: profileLoading } =
     useGetCallerUserProfile();
   const { data: users = [], isLoading: usersLoading } = useGetUsers();
@@ -338,6 +338,13 @@ export default function CallingCardsPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logoutLocal();
+    } catch {}
+    navigate({ to: "/" });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <GlobalCallWatcher />
@@ -349,43 +356,19 @@ export default function CallingCardsPage() {
           <span className="font-display font-bold text-lg">WaveChat</span>
         </div>
         <nav className="flex items-center gap-2">
-          <Link to="/lobby">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="cards.link"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span className="hidden md:block">Lobby</span>
-            </Button>
-          </Link>
-          <Link to="/cards">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2 text-primary"
-              data-ocid="cards.tab"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden md:block">Calling Cards</span>
-            </Button>
-          </Link>
-          <NotificationBell />
-          <Link to="/profile">
-            <Button
-              size="sm"
-              className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:opacity-90 border-0"
-              data-ocid="nav.profile_link"
-            >
-              <UserCircle className="h-4 w-4" />
-              <span className="hidden md:block">My Profile</span>
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="rounded-full w-9 h-9 p-0"
+            data-ocid="cards.close_button"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </nav>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
+      <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-10 pb-24">
         {/* Incoming call notification banners */}
         <AnimatePresence>
           {incomingRequests.map((cr) => {
@@ -440,15 +423,6 @@ export default function CallingCardsPage() {
         </AnimatePresence>
 
         <div className="flex items-center gap-4 mb-8">
-          <Link to="/lobby">
-            <Button
-              variant="ghost"
-              className="rounded-full gap-2"
-              data-ocid="cards.secondary_button"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back to Lobby
-            </Button>
-          </Link>
           <div>
             <h1 className="font-display font-bold text-3xl text-foreground">
               Calling Cards
@@ -485,37 +459,84 @@ export default function CallingCardsPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-            {users.map((user, i) => (
-              <CallingCard
-                key={user.principal.toString()}
-                user={user}
-                index={i}
-                myPrincipal={myPrincipal}
-              />
-            ))}
-            {localUsers.map((user, i) => {
-              const pendingOutgoing = callRequests.find(
-                (cr) =>
-                  cr.callerUsername === localSession?.username &&
-                  cr.calleeUsername === user.username &&
-                  cr.status === "pending",
-              );
-              return (
-                <LocalCallingCard
-                  key={user.username}
-                  user={user}
-                  index={users.length + i}
-                  myUsername={localSession?.username || ""}
-                  hasPendingOutgoing={!!pendingOutgoing}
-                  onCall={() => handleLocalCall(user.username)}
-                  isCalling={sendCallRequestAsLocal.isPending}
-                />
-              );
-            })}
+          <div className="relative">
+            <div
+              ref={carouselRef}
+              className="flex gap-5 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-4 px-2"
+              style={{ scrollbarWidth: "none" }}
+            >
+              {users.map((user, i) => (
+                <div
+                  key={user.principal.toString()}
+                  className="flex-shrink-0 w-72 snap-center"
+                >
+                  <CallingCard
+                    user={user}
+                    index={i}
+                    myPrincipal={myPrincipal}
+                  />
+                </div>
+              ))}
+              {localUsers.map((user, i) => {
+                const pendingOutgoing = callRequests.find(
+                  (cr) =>
+                    cr.callerUsername === localSession?.username &&
+                    cr.calleeUsername === user.username &&
+                    cr.status === "pending",
+                );
+                return (
+                  <div
+                    key={user.username}
+                    className="flex-shrink-0 w-72 snap-center"
+                  >
+                    <LocalCallingCard
+                      user={user}
+                      index={users.length + i}
+                      myUsername={localSession?.username || ""}
+                      hasPendingOutgoing={!!pendingOutgoing}
+                      onCall={() => handleLocalCall(user.username)}
+                      isCalling={sendCallRequestAsLocal.isPending}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {/* Left arrow */}
+            <button
+              type="button"
+              onClick={() => {
+                if (carouselRef.current) {
+                  carouselRef.current.scrollBy({
+                    left: -300,
+                    behavior: "smooth",
+                  });
+                }
+              }}
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-foreground hover:bg-muted transition-colors z-10 text-xl font-bold"
+              aria-label="Previous"
+            >
+              &#8249;
+            </button>
+            {/* Right arrow */}
+            <button
+              type="button"
+              onClick={() => {
+                if (carouselRef.current) {
+                  carouselRef.current.scrollBy({
+                    left: 300,
+                    behavior: "smooth",
+                  });
+                }
+              }}
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-foreground hover:bg-muted transition-colors z-10 text-xl font-bold"
+              aria-label="Next"
+            >
+              &#8250;
+            </button>
           </div>
         )}
       </main>
+      <BottomNav />
     </div>
   );
 }

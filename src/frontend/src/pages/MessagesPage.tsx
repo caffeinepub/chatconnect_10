@@ -6,8 +6,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  Home,
   Loader2,
+  LogOut,
   Mail,
   MessageCircle,
   Newspaper,
@@ -22,9 +22,8 @@ import type {
   DirectMessage,
   backendInterface as ExtendedBackend,
 } from "../backend.d";
+import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
-import { MessagesButton } from "../components/MessagesButton";
-import { NotificationBell } from "../components/NotificationBell";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
@@ -198,76 +197,20 @@ export default function MessagesPage() {
           <span className="font-display font-bold text-lg">WaveChat</span>
         </div>
         <nav className="flex items-center gap-2">
-          <Link to="/lobby">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.lobby_link"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span className="hidden md:block">Lobby</span>
-            </Button>
-          </Link>
-          <Link to="/cards">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.cards_link"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden md:block">Calling Cards</span>
-            </Button>
-          </Link>
-          <Link to="/feed">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.feed_link"
-            >
-              <Newspaper className="h-4 w-4" />
-              <span className="hidden md:block">Feed</span>
-            </Button>
-          </Link>
-          <Link to="/cards">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.home_link"
-            >
-              <Home className="h-4 w-4" />
-              <span className="hidden md:block">Home</span>
-            </Button>
-          </Link>
-          <NotificationBell />
-          <MessagesButton />
-          <Link to="/profile">
-            <Button
-              size="sm"
-              className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:opacity-90 border-0"
-              data-ocid="nav.profile_link"
-            >
-              <UserCircle className="h-4 w-4" />
-              <span className="hidden md:block">My Profile</span>
-            </Button>
-          </Link>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleLogout}
-            className="rounded-full gap-2"
+            className="rounded-full w-9 h-9 p-0"
             data-ocid="messages.close_button"
           >
-            <span className="hidden md:block">Logout</span>
+            <LogOut className="h-4 w-4" />
           </Button>
         </nav>
       </header>
 
       {/* Main two-panel layout */}
-      <main className="flex flex-1 max-w-6xl mx-auto w-full px-4 py-6 gap-4">
+      <main className="flex flex-1 max-w-6xl mx-auto w-full px-4 py-6 pb-24 gap-4">
         {/* Conversation List */}
         <motion.div
           initial={{ opacity: 0, x: -16 }}
@@ -498,6 +441,7 @@ export default function MessagesPage() {
           caffeine.ai
         </a>
       </footer>
+      <BottomNav />
     </div>
   );
 }

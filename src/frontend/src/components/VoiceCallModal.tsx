@@ -8,18 +8,21 @@ import { useActor } from "../hooks/useActor";
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun.relay.metered.ca:80" },
   {
-    urls: "turn:openrelay.metered.ca:80",
+    urls: "turn:a.relay.metered.ca:80",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
   {
-    urls: "turn:openrelay.metered.ca:443",
+    urls: "turn:a.relay.metered.ca:443",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
   {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    urls: "turns:a.relay.metered.ca:443?transport=tcp",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
@@ -79,7 +82,7 @@ export function VoiceCallModal({
     if (callState === "connected") {
       timerRef.current = setInterval(() => {
         setSeconds((s) => s + 1);
-      }, 1000);
+      }, 100);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -152,7 +155,10 @@ export function VoiceCallModal({
     localStreamRef.current = stream;
 
     // Create peer connection — callee answers the offer from caller
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({
+      iceServers: ICE_SERVERS,
+      iceCandidatePoolSize: 10,
+    });
     pcRef.current = pc;
 
     // Add local tracks
@@ -238,7 +244,7 @@ export function VoiceCallModal({
             } catch {
               // ignore
             }
-          }, 1500);
+          }, 100);
         }
       } catch {
         // ignore
@@ -262,7 +268,7 @@ export function VoiceCallModal({
     // Poll for offer signal
     const offerPollInterval = setInterval(async () => {
       await pollForOffer();
-    }, 1000);
+    }, 100);
 
     // Stop polling after 15s
     setTimeout(() => clearInterval(offerPollInterval), 15000);

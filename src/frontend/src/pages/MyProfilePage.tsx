@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
-  Home,
+  ChevronRight,
+  Headphones,
   LogOut,
   MessageCircle,
   Newspaper,
@@ -20,9 +21,8 @@ import type {
   backendInterface as ExtendedBackend,
   LocalUser,
 } from "../backend.d";
+import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
-import { MessagesButton } from "../components/MessagesButton";
-import { NotificationBell } from "../components/NotificationBell";
 import { useActor } from "../hooks/useActor";
 import { useLocalAuth } from "../hooks/useLocalAuth";
 
@@ -116,77 +116,19 @@ export default function MyProfilePage() {
           <span className="font-display font-bold text-lg">WaveChat</span>
         </div>
         <nav className="flex items-center gap-2">
-          <Link to="/lobby">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.lobby_link"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span className="hidden md:block">Lobby</span>
-            </Button>
-          </Link>
-          <Link to="/cards">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.cards_link"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden md:block">Calling Cards</span>
-            </Button>
-          </Link>
-          <Link to="/feed">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.feed_link"
-            >
-              <Newspaper className="h-4 w-4" />
-              <span className="hidden md:block">Feed</span>
-            </Button>
-          </Link>
-          <Link to="/">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2"
-              data-ocid="nav.home_link"
-            >
-              <Home className="h-4 w-4" />
-              <span className="hidden md:block">Home</span>
-            </Button>
-          </Link>
-          <NotificationBell />
-          <MessagesButton />
-          <Link to="/profile">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full gap-2 text-primary"
-              data-ocid="nav.profile_link"
-            >
-              <UserCircle className="h-4 w-4" />
-              <span className="hidden md:block">My Profile</span>
-            </Button>
-          </Link>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleLogout}
-            className="rounded-full gap-2"
+            className="rounded-full w-9 h-9 p-0"
             data-ocid="profile.close_button"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden md:block">Logout</span>
           </Button>
         </nav>
       </header>
 
-      <main className="flex-1 flex items-start justify-center px-4 py-10">
+      <main className="flex-1 flex items-start justify-center px-4 py-10 pb-28">
         <div className="w-full max-w-md">
           {/* Profile Card */}
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -290,15 +232,24 @@ export default function MyProfilePage() {
           </div>
 
           {/* Contact Developer */}
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            Need help?{" "}
-            <a
-              href="mailto:srklimon3@gmail.com"
-              className="text-primary underline hover:text-primary/80 transition-colors"
-            >
-              srklimon3@gmail.com
-            </a>
-          </p>
+          <a
+            href="mailto:srklimon3@gmail.com"
+            className="mt-4 flex items-center gap-3 w-full bg-white rounded-2xl shadow-sm border border-border px-5 py-4 hover:shadow-md transition-shadow group"
+            data-ocid="profile.link"
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+              <Headphones className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm text-foreground">
+                Contact Developer
+              </p>
+              <p className="text-xs text-muted-foreground">
+                srklimon3@gmail.com
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+          </a>
         </div>
       </main>
 
@@ -313,6 +264,7 @@ export default function MyProfilePage() {
           caffeine.ai
         </a>
       </footer>
+      <BottomNav />
     </div>
   );
 }

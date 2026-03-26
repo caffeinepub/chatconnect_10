@@ -9,6 +9,9 @@ const ICE_SERVERS = [
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.services.mozilla.com" },
+  { urls: "stun:stun.stunprotocol.org:3478" },
   { urls: "stun:stun.relay.metered.ca:80" },
   {
     urls: "turn:a.relay.metered.ca:80",
@@ -56,7 +59,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     new Map(),
   );
 
-  // Start mic level monitoring using AnalyserNode
   const startMicLevelMonitor = useCallback((stream: MediaStream) => {
     try {
       const ctx = new AudioContext();
@@ -95,7 +97,10 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
 
   const createPeerConnection = useCallback(
     (username: string): RTCPeerConnection => {
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 10, // pre-gather candidates before connection
+      });
 
       pc.onicecandidate = async (event) => {
         if (event.candidate && voiceActor && token) {
@@ -182,7 +187,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           }
           const offer = JSON.parse(signal.data);
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          // Flush any buffered ICE candidates
           await flushPendingIceCandidates(from, pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
@@ -201,7 +205,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           if (pc) {
             const answer = JSON.parse(signal.data);
             await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            // Flush any buffered ICE candidates
             await flushPendingIceCandidates(from, pc);
           }
         } else if (signal.signalType === "ice") {
@@ -209,7 +212,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           if (pc) {
             const candidate = JSON.parse(signal.data) as RTCIceCandidateInit;
             if (!pc.remoteDescription) {
-              // Buffer until remote description is set
               const pending = pendingIceCandidates.current.get(from) ?? [];
               pending.push(candidate);
               pendingIceCandidates.current.set(from, pending);
@@ -235,7 +237,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     flushPendingIceCandidates,
   ]);
 
-  // Test mic: loopback for 3 seconds with level display
   const testMic = useCallback(async () => {
     if (isMicTesting) return;
     setIsMicTesting(true);
@@ -246,7 +247,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false, // disabled: AGC amplifies echo
           channelCount: 1,
           sampleRate: 48000,
         },
@@ -275,7 +276,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       return;
     }
 
-    // Play back to self (loopback) so user can hear their own mic
     let loopbackCtx: AudioContext | null = null;
     try {
       loopbackCtx = new AudioContext();
@@ -290,7 +290,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
 
     await new Promise<void>((resolve) => setTimeout(resolve, 3000));
 
-    // Stop
     for (const track of stream.getTracks()) track.stop();
     if (loopbackCtx) loopbackCtx.close().catch(() => {});
     stopMicLevelMonitor();
@@ -304,14 +303,13 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       return;
     }
 
-    // Request mic permission FIRST with echo cancellation
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false, // disabled: AGC amplifies echo
           channelCount: 1,
           sampleRate: 48000,
         },
@@ -344,7 +342,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     localStream.current = stream;
     startMicLevelMonitor(stream);
 
-    // Attempt backend join — if it fails, show error and abort
     if (!voiceActor) {
       toast.error("Voice signaling unavailable. Try again later.");
       for (const track of stream.getTracks()) track.stop();
@@ -388,8 +385,8 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       }
     }
 
-    // Poll signals every 300ms for faster ICE exchange
-    signalPollInterval.current = setInterval(processSignals, 300);
+    // Poll signals every 100ms — same speed as calls for real-time ICE exchange
+    signalPollInterval.current = setInterval(processSignals, 100);
 
     // Poll participants every 3s
     participantPollInterval.current = setInterval(async () => {
@@ -439,8 +436,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       el.remove();
     }
     audioElements.current.clear();
-
-    // Clear pending ICE candidates
     pendingIceCandidates.current.clear();
 
     setIsInChannel(false);

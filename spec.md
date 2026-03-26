@@ -1,36 +1,29 @@
-# ChatConnect
+# Wave Chat
 
 ## Current State
-Full-stack chat/social app with username/password auth, lobby chat, calling cards, voice calls, feed (posts/likes/comments), notifications, and My Profile. Nav bar has Home, Lobby, Feed, Cards, Notifications bell, My Profile. No private direct messaging between users.
+Full-stack social/voice chat app with bottom nav, calling cards grid, lobby chatroom, call screen with WebRTC, and profile page.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `DirectMessage` type in backend: id, senderUsername, recipientUsername, text, timestamp, isRead
-- Backend methods:
-  - `sendDirectMessage(token, recipientUsername, text)` -> Nat (message id)
-  - `getConversations(token)` -> list of conversation summaries (otherUsername, lastMessage, lastTimestamp, unreadCount)
-  - `getDirectMessages(token, otherUsername)` -> list of DirectMessage
-  - `markDirectMessagesRead(token, otherUsername)` -> void
-  - `getUnreadDMCount(token)` -> Nat
-- Frontend `/messages` route with MessagesPage component
-- MessagesPage: inbox view (list of conversations), click to open chat thread with full message history, real-time polling every 2s
-- Send direct message from within MessagesPage and from a user's calling card
-- Messages button in top nav bar on ALL pages (Lobby, Feed, CallingCards), showing blinking badge with unread count
+- Lobby: horizontal strip at the top of the chat area showing users currently on mic (from voiceParticipants) with their username/display name
+- CallScreen: 5-second "call about to start" countdown animation during the connecting phase (before isConnected becomes true), shown in a visually distinct way (large pulsing countdown)
 
 ### Modify
-- All nav bars (LobbyPage, FeedPage, CallingCardsPage, MyProfilePage) to add Messages nav button with unread count badge
-- App.tsx to add `/messages` route
-- CallingCardsPage: add "Message" button on each calling card to start a DM with that user
+- CallingCardsPage: change cards layout from a grid to a horizontal one-at-a-time carousel (snap scroll or prev/next navigation) so cards appear one by one horizontally
+- CallingCardsPage: remove the "Back to Lobby" button from the page header
+- BottomNav: remove the "Contact Developer / Dev" button entirely from the bottom nav bar
+- MyProfilePage: the contact developer link (srklimon3@gmail.com) is already in the profile page footer area — make it a more prominent styled button/card under the profile card
+- LobbyPage: adjust the message input area to have more bottom padding (pb-24 or similar) so it is not hidden behind the BottomNav; move the form slightly upward
+- CallScreen: 20-minute timer should only START counting down after `isConnected === true` — reset/hold at CALL_DURATION until connected; stop showing timer during connecting phase
 
 ### Remove
-- Nothing removed
+- BottomNav: Dev/Contact Developer button
+- CallingCardsPage: "Back to Lobby" ArrowLeft button
 
 ## Implementation Plan
-1. Regenerate Motoko backend with DirectMessage type and all DM methods
-2. Update backend.d.ts with new types and method signatures
-3. Create MessagesPage component with inbox + thread view
-4. Add unread DM count polling hook used across all nav bars
-5. Add Messages button to all nav bars
-6. Add "Message" button on calling cards
-7. Add /messages route to App.tsx
+1. BottomNav.tsx: remove the Contact Developer button (last button in the nav)
+2. CallingCardsPage.tsx: remove ArrowLeft/Back to Lobby link; replace the grid layout with a horizontal carousel (use snap-x scroll with one card per snap point, add prev/next arrow buttons)
+3. LobbyPage.tsx: add a horizontal "On Mic" user strip above the ScrollArea for chat messages (shows voiceParticipants usernames with mic icon); add pb-24 to bottom input area so it clears the nav bar
+4. MyProfilePage.tsx: make the contact developer section a proper styled card/button below the profile card
+5. CallScreen.tsx: hold timer at CALL_DURATION until isConnected; add 5-second animated countdown (5→4→3→2→1→"Starting!") that plays during the connecting phase before connection is established

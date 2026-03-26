@@ -26,9 +26,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Comment, Post, SessionToken } from "../backend.d";
+import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
-import { MessagesButton } from "../components/MessagesButton";
-import { NotificationBell } from "../components/NotificationBell";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
@@ -395,65 +394,19 @@ export default function FeedPage() {
             )}
           </div>
           <nav className="flex items-center gap-2">
-            <MessagesButton />
-            <Link to="/lobby">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.lobby_link"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span className="hidden md:block">Lobby</span>
-              </Button>
-            </Link>
-            <Link to="/cards">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.cards_link"
-              >
-                <Users className="h-4 w-4" />
-                <span className="hidden md:block">Calling Cards</span>
-              </Button>
-            </Link>
-            <Link to="/feed">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2 text-primary"
-                data-ocid="nav.feed_link"
-              >
-                <Newspaper className="h-4 w-4" />
-                <span className="hidden md:block">Feed</span>
-              </Button>
-            </Link>
-            <NotificationBell />
-            <Link to="/profile">
-              <Button
-                size="sm"
-                className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:opacity-90 border-0"
-                data-ocid="nav.profile_link"
-              >
-                <UserCircle className="h-4 w-4" />
-                <span className="hidden md:block">My Profile</span>
-              </Button>
-            </Link>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleLogout}
-              className="rounded-full gap-2"
+              className="rounded-full w-9 h-9 p-0"
               data-ocid="feed.close_button"
             >
               <LogOut className="h-4 w-4" />
-              <span className="hidden md:block">Logout</span>
             </Button>
           </nav>
         </header>
 
-        <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8">
+        <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 pb-24">
           {/* Composer */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -786,6 +739,7 @@ export default function FeedPage() {
           </a>
         </footer>
       </div>
+      <BottomNav />
     </TooltipProvider>
   );
 }

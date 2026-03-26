@@ -232,7 +232,7 @@ export default function SignupPage() {
                 placeholder="Your full name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="signup.input"
               />
               {errors.displayName && (
@@ -255,7 +255,7 @@ export default function SignupPage() {
                 onChange={(e) =>
                   setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))
                 }
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="signup.input"
                 autoComplete="username"
               />
@@ -278,7 +278,7 @@ export default function SignupPage() {
                 placeholder="Min 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="signup.input"
                 autoComplete="new-password"
               />
@@ -301,7 +301,7 @@ export default function SignupPage() {
                 placeholder="Repeat your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="signup.input"
                 autoComplete="new-password"
               />
@@ -326,7 +326,7 @@ export default function SignupPage() {
                 placeholder="Your age"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl text-base"
                 data-ocid="signup.input"
               />
               {errors.age && (
