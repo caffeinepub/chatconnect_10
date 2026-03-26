@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ChevronUp,
   Heart,
-  Home,
   Loader2,
   LogOut,
   MessageCircle,
@@ -428,17 +427,6 @@ export default function FeedPage() {
               >
                 <Newspaper className="h-4 w-4" />
                 <span className="hidden md:block">Feed</span>
-              </Button>
-            </Link>
-            <Link to="/">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.home_link"
-              >
-                <Home className="h-4 w-4" />
-                <span className="hidden md:block">Home</span>
               </Button>
             </Link>
             <NotificationBell />

@@ -83,35 +83,88 @@ function formatTime(seconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function UserCard({
+function OtherUserCard({
   username,
   localUsers,
-}: { username: string; localUsers: LocalUser[] }) {
+  timeLeft,
+}: { username: string; localUsers: LocalUser[]; timeLeft: number }) {
   const user = localUsers.find((u) => u.username === username);
   const displayName = user?.displayName || username;
   const gradient = getGradient(username);
+
+  const timerColor =
+    timeLeft <= 60
+      ? "text-red-400 border-red-500/40 bg-red-500/10"
+      : timeLeft <= 300
+        ? "text-yellow-300 border-yellow-500/40 bg-yellow-500/10"
+        : "text-emerald-400 border-emerald-500/40 bg-emerald-500/10";
+
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="relative">
+    <div className="flex flex-col items-center gap-6">
+      {/* Avatar with glowing animated ring */}
+      <div className="relative flex items-center justify-center">
+        {/* Outer glow rings */}
+        <span
+          className="absolute w-52 h-52 rounded-full animate-ping"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(94,234,212,0.15) 0%, transparent 70%)",
+            animationDuration: "2s",
+          }}
+        />
+        <span
+          className="absolute w-48 h-48 rounded-full"
+          style={{
+            boxShadow:
+              "0 0 40px 10px rgba(94,234,212,0.25), 0 0 80px 20px rgba(139,92,246,0.15)",
+          }}
+        />
+        {/* Avatar circle */}
         {user?.photo ? (
           <img
             src={user.photo.getDirectURL()}
             alt={displayName}
-            className="w-32 h-32 rounded-full object-cover border-4 border-white/20 shadow-2xl"
+            className="w-40 h-40 rounded-full object-cover border-4 shadow-2xl"
+            style={{ borderColor: "rgba(94,234,212,0.5)" }}
           />
         ) : (
           <div
-            className={`w-32 h-32 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-4xl font-bold shadow-2xl border-4 border-white/10`}
+            className={`w-40 h-40 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-5xl font-bold shadow-2xl border-4`}
+            style={{ borderColor: "rgba(94,234,212,0.5)" }}
           >
             {displayName.slice(0, 2).toUpperCase()}
           </div>
         )}
-        <span className="absolute bottom-2 right-2 w-5 h-5 bg-green-400 rounded-full border-2 border-white/20" />
       </div>
+
+      {/* Name & username */}
       <div className="text-center">
-        <p className="text-white font-bold text-xl">{displayName}</p>
-        <p className="text-white/50 text-sm">@{username}</p>
+        <p className="text-white font-bold text-3xl tracking-tight">
+          {displayName}
+        </p>
+        <p className="text-white/50 text-base mt-1">@{username}</p>
       </div>
+
+      {/* Live Call badge */}
+      <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-green-500/30 bg-green-500/10">
+        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        <span className="text-green-400 text-sm font-semibold tracking-wide">
+          Live Call
+        </span>
+      </div>
+
+      {/* Timer pill */}
+      <div
+        className={`flex items-center gap-2 px-5 py-2 rounded-full border font-mono font-bold text-2xl tabular-nums transition-colors ${timerColor}`}
+      >
+        {formatTime(timeLeft)}
+      </div>
+
+      {timeLeft <= 60 && (
+        <p className="text-red-400 text-sm font-semibold animate-pulse">
+          ⚠️ Less than 1 minute remaining
+        </p>
+      )}
     </div>
   );
 }
@@ -464,105 +517,154 @@ export default function CallScreen() {
     });
   }, []);
 
-  const urgentColor =
-    timeLeft <= 60
-      ? "text-red-400"
-      : timeLeft <= 300
-        ? "text-yellow-300"
-        : "text-white";
+  const myUsername = localSession?.username ?? "";
+  const otherUsername = callRequest
+    ? myUsername === callRequest.callerUsername
+      ? callRequest.calleeUsername
+      : callRequest.callerUsername
+    : null;
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-between py-10 px-4"
+      className="min-h-screen flex flex-col items-center justify-between relative overflow-hidden"
       style={{
         background:
-          "linear-gradient(135deg, oklch(0.15 0.03 260) 0%, oklch(0.10 0.02 280) 50%, oklch(0.08 0.04 300) 100%)",
+          "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+        animation: "gradientShift 10s ease infinite alternate",
       }}
       data-ocid="call.panel"
     >
-      {/* Top: Timer */}
-      <div className="flex flex-col items-center gap-2 pt-8">
-        <p className="text-white/50 text-sm uppercase tracking-widest font-semibold">
-          Call in progress
-        </p>
+      {/* Animated gradient keyframes */}
+      <style>{`
+        @keyframes gradientShift {
+          0% { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
+          33% { background: linear-gradient(135deg, #0d1b2a 0%, #1b4332 40%, #0f0c29 100%); }
+          66% { background: linear-gradient(135deg, #1a0533 0%, #0c1445 50%, #1a2a3a 100%); }
+          100% { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
+        }
+        @keyframes ringPulse {
+          0%, 100% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 0.2; transform: scale(1.08); }
+        }
+      `}</style>
+
+      {/* Background decorative blobs */}
+      <div
+        className="absolute top-0 left-0 w-full h-full pointer-events-none"
+        aria-hidden="true"
+      >
         <div
-          className={`font-mono font-bold text-7xl tabular-nums ${urgentColor} transition-colors`}
-          data-ocid="call.section"
-        >
-          {formatTime(timeLeft)}
+          className="absolute top-[-10%] left-[-10%] w-96 h-96 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)",
+          }}
+        />
+        <div
+          className="absolute bottom-[-10%] right-[-10%] w-96 h-96 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(94,234,212,0.15) 0%, transparent 70%)",
+          }}
+        />
+      </div>
+
+      {/* Top: connected status */}
+      <div className="w-full flex justify-center pt-8 z-10">
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 bg-white/5">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-white/70 text-sm font-medium">Connected</span>
         </div>
-        {timeLeft <= 60 && (
-          <p className="text-red-400 text-sm font-semibold animate-pulse">
-            ⚠️ Less than 1 minute remaining
-          </p>
-        )}
       </div>
 
-      {/* Middle: User cards */}
-      <div className="flex items-center justify-center gap-12 md:gap-24 my-8">
-        {callRequest ? (
-          <>
-            <UserCard
-              username={callRequest.callerUsername}
-              localUsers={localUsers}
-            />
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-14 h-14 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
-                <Phone className="h-6 w-6 text-green-400" />
-              </div>
-              <span className="text-white/40 text-xs">Connected</span>
-            </div>
-            <UserCard
-              username={callRequest.calleeUsername}
-              localUsers={localUsers}
-            />
-          </>
+      {/* Center: other user's profile card */}
+      <div className="flex flex-col items-center justify-center flex-1 z-10 py-8">
+        {callRequest && otherUsername ? (
+          <OtherUserCard
+            username={otherUsername}
+            localUsers={localUsers}
+            timeLeft={timeLeft}
+          />
         ) : (
-          <div className="text-white/40 text-lg">Loading call info...</div>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-40 h-40 rounded-full bg-white/10 animate-pulse" />
+            <div className="text-white/40 text-lg">Connecting...</div>
+          </div>
         )}
       </div>
 
-      {/* Bottom: Controls */}
-      <div className="flex items-center gap-5 pb-8" data-ocid="call.card">
-        <button
-          type="button"
-          onClick={handleToggleMic}
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${
-            micOn
-              ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
-              : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
-          }`}
-          data-ocid="call.toggle"
+      {/* Bottom: Controls — glassmorphism pill */}
+      <div className="z-10 pb-10">
+        <div
+          className="flex items-end gap-6 px-8 py-5 rounded-full border border-white/10"
+          style={{
+            background: "rgba(255,255,255,0.07)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+          }}
+          data-ocid="call.card"
         >
-          {micOn ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
-        </button>
+          {/* Mic */}
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleToggleMic}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                micOn
+                  ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                  : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
+              }`}
+              data-ocid="call.toggle"
+            >
+              {micOn ? (
+                <Mic className="h-5 w-5" />
+              ) : (
+                <MicOff className="h-5 w-5" />
+              )}
+            </button>
+            <span className="text-white/40 text-xs">
+              {micOn ? "Mute" : "Unmute"}
+            </span>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => handleEndCall()}
-          disabled={callEnded || endCallMutation.isPending}
-          className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white flex items-center justify-center shadow-2xl transition-all scale-110 border-4 border-red-400/30"
-          data-ocid="call.delete_button"
-        >
-          <Phone className="h-7 w-7 rotate-[135deg]" />
-        </button>
+          {/* End Call */}
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleEndCall()}
+              disabled={callEnded || endCallMutation.isPending}
+              className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white flex items-center justify-center shadow-2xl transition-all border-4 border-red-400/30"
+              style={{ boxShadow: "0 0 30px rgba(239,68,68,0.4)" }}
+              data-ocid="call.delete_button"
+            >
+              <Phone className="h-7 w-7 rotate-[135deg]" />
+            </button>
+            <span className="text-white/40 text-xs">End</span>
+          </div>
 
-        <button
-          type="button"
-          onClick={handleToggleSpeaker}
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${
-            speakerOn
-              ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
-              : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
-          }`}
-          data-ocid="call.toggle"
-        >
-          {speakerOn ? (
-            <Volume2 className="h-6 w-6" />
-          ) : (
-            <VolumeX className="h-6 w-6" />
-          )}
-        </button>
+          {/* Speaker */}
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleToggleSpeaker}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                speakerOn
+                  ? "bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                  : "bg-red-500/80 hover:bg-red-600 text-white border border-red-400/40"
+              }`}
+              data-ocid="call.toggle"
+            >
+              {speakerOn ? (
+                <Volume2 className="h-5 w-5" />
+              ) : (
+                <VolumeX className="h-5 w-5" />
+              )}
+            </button>
+            <span className="text-white/40 text-xs">
+              {speakerOn ? "Speaker" : "Muted"}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -11,7 +11,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
-  Home,
   LogOut,
   MessageCircle,
   Mic,
@@ -256,17 +255,6 @@ export default function LobbyPage() {
               >
                 <Newspaper className="h-4 w-4" />
                 <span className="hidden md:block">Feed</span>
-              </Button>
-            </Link>
-            <Link to="/cards">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full gap-2"
-                data-ocid="nav.home_link"
-              >
-                <Home className="h-4 w-4" />
-                <span className="hidden md:block">Home</span>
               </Button>
             </Link>
             <NotificationBell />
