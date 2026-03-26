@@ -224,6 +224,7 @@ export default function LobbyPage() {
             )}
           </div>
           <nav className="flex items-center gap-2">
+            <MessagesButton />
             <Link to="/lobby">
               <Button
                 variant="ghost"
@@ -269,7 +270,6 @@ export default function LobbyPage() {
               </Button>
             </Link>
             <NotificationBell />
-            <MessagesButton />
             <Link to="/profile">
               <Button
                 size="sm"

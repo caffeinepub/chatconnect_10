@@ -389,7 +389,15 @@ actor {
   public shared func getMySignals(token : SessionToken) : async [Signal] {
     let username = switch (validateToken(token)) {
       case (?u) { u };
-      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+      case (null) { return [] };
+    };
+    // Expire signals older than 90 seconds to prevent stale ICE delivery
+    let expiryNs : Int = 90_000_000_000;
+    let now = Time.now();
+    for ((id, s) in voiceSignals.entries().toArray().values()) {
+      if (now - s.timestamp > expiryNs) {
+        voiceSignals.remove(id);
+      };
     };
     let mine = voiceSignals.entries().toArray().filter(
       func((id, s)) { s.toUsername == username }

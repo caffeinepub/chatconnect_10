@@ -19,18 +19,22 @@ const CALL_DURATION = 20 * 60; // 20 minutes in seconds
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.relay.metered.ca:80" },
   {
-    urls: "turn:openrelay.metered.ca:80",
+    urls: "turn:a.relay.metered.ca:80",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
   {
-    urls: "turn:openrelay.metered.ca:443",
+    urls: "turn:a.relay.metered.ca:443",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
   {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    urls: "turns:a.relay.metered.ca:443?transport=tcp",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
@@ -297,6 +301,14 @@ export default function CallScreen() {
           remoteAudioRef.current = audio;
         }
         remoteAudioRef.current.srcObject = event.streams[0];
+        remoteAudioRef.current.play().catch(() => {});
+      };
+
+      // Restart ICE on failure
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === "failed") {
+          pc.restartIce();
+        }
       };
 
       // Send ICE candidates
@@ -370,7 +382,7 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 1500);
+        }, 700);
       } else {
         // Callee: poll for offer, then answer
         signalPollRef.current = setInterval(async () => {
@@ -410,7 +422,7 @@ export default function CallScreen() {
           } catch {
             // ignore
           }
-        }, 1500);
+        }, 700);
       }
     };
 

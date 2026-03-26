@@ -27,21 +27,21 @@ function relativeTime(timestamp: bigint): string {
 }
 
 function notifLabel(notif: AppNotification): string {
-  const nt = notif.notifType as unknown as Record<string, null>;
+  const nt = notif.notifType as string;
   const truncated = notif.postText
     ? `${notif.postText.slice(0, 30)}${notif.postText.length > 30 ? "\u2026" : ""}`
     : "";
-  if ("like" in nt)
+  if (nt === "like")
     return `${notif.actorName} liked your post${truncated ? `: ${truncated}` : ""}`;
-  if ("comment" in nt)
+  if (nt === "comment")
     return `${notif.actorName} replied to your post${truncated ? `: ${truncated}` : ""}`;
-  if ("callRequest" in nt) return `${notif.actorName} is requesting a call`;
+  if (nt === "callRequest") return `${notif.actorName} is requesting a call`;
   return "New notification";
 }
 
 function notifDest(notif: AppNotification): string {
-  const nt = notif.notifType as unknown as Record<string, null>;
-  if ("callRequest" in nt) return "/cards";
+  const nt = notif.notifType as string;
+  if (nt === "callRequest") return "/cards";
   return "/feed";
 }
 

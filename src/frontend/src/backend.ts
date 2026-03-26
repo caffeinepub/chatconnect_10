@@ -199,6 +199,11 @@ export interface backendInterface {
     getLocalUserProfile(token: bigint): Promise<LocalUser | null>;
     updateLocalUserPhoto(token: bigint, photo: ExternalBlob): Promise<void>;
     getLocalUsers(): Promise<Array<LocalUser>>;
+    sendDirectMessage(token: bigint, recipientUsername: string, text: string): Promise<bigint>;
+    getDirectMessages(token: bigint, otherUsername: string): Promise<Array<any>>;
+    getConversations(token: bigint): Promise<Array<any>>;
+    markDirectMessagesRead(token: bigint, otherUsername: string): Promise<void>;
+    getUnreadDMCount(token: bigint): Promise<bigint>;
     sendMessageAsLocal(token: bigint, text: string): Promise<bigint>;
     getMessagesAsLocal(token: bigint): Promise<Array<Message>>;
     createPostAsLocal(token: bigint, text: string): Promise<bigint>;
@@ -585,6 +590,21 @@ export class Backend implements backendInterface {
             age: u.age,
             photo: u.photo.length === 0 ? undefined : await this._downloadFile(u.photo[0]),
         })));
+    }
+    async sendDirectMessage(arg0: bigint, arg1: string, arg2: string): Promise<bigint> {
+        return await this.actor.sendDirectMessage(arg0, arg1, arg2);
+    }
+    async getDirectMessages(arg0: bigint, arg1: string): Promise<Array<any>> {
+        return await this.actor.getDirectMessages(arg0, arg1);
+    }
+    async getConversations(arg0: bigint): Promise<Array<any>> {
+        return await this.actor.getConversations(arg0);
+    }
+    async markDirectMessagesRead(arg0: bigint, arg1: string): Promise<void> {
+        return await this.actor.markDirectMessagesRead(arg0, arg1);
+    }
+    async getUnreadDMCount(arg0: bigint): Promise<bigint> {
+        return await this.actor.getUnreadDMCount(arg0);
     }
     async sendMessageAsLocal(arg0: bigint, arg1: string): Promise<bigint> {
         return await this.actor.sendMessageAsLocal(arg0, arg1);

@@ -372,7 +372,6 @@ export default function CallingCardsPage() {
             </Button>
           </Link>
           <NotificationBell />
-          <MessagesButton />
           <Link to="/profile">
             <Button
               size="sm"

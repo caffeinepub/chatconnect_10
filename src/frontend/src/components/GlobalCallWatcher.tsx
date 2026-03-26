@@ -50,6 +50,9 @@ export function GlobalCallWatcher() {
                       params: { callId: idKey },
                     });
                   },
+                  onError: () => {
+                    toast.error("Failed to accept call. Please try again.");
+                  },
                 },
               );
             },
