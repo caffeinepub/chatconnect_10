@@ -1,7 +1,7 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  CallRequest,
+  CallRequestWithStatus as CallRequest,
   backendInterface as ExtendedBackend,
   LocalCallRequest,
   Message,

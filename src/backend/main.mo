@@ -10,8 +10,14 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Array "mo:core/Array";
+import Set "mo:core/Set";
+
+
 
 actor {
+  type SessionToken = Nat;
+  type NotificationType = { #like; #comment; #callRequest };
+
   let accessControlState = AccessControl.initState();
   let messages = Map.empty<Nat, Message>();
   let callRequests = Map.empty<Nat, CallRequest>();
@@ -93,9 +99,8 @@ actor {
     displayName : Text;
     age : Nat;
     photo : ?Storage.ExternalBlob;
+    lastNameChange : ?Time.Time;
   };
-
-  type SessionToken = Nat;
 
   type VoiceParticipant = {
     username : Text;
@@ -111,8 +116,6 @@ actor {
     data : Text;
     timestamp : Time.Time;
   };
-
-  type NotificationType = { #like; #comment; #callRequest };
 
   type Notification = {
     id : Nat;
@@ -143,6 +146,11 @@ actor {
     unreadCount : Nat;
   };
 
+  type ProfileSettings = {
+    hideFollowers : Bool;
+    hideFollowing : Bool;
+  };
+
   include MixinStorage();
   include MixinAuthorization(accessControlState);
 
@@ -166,7 +174,7 @@ actor {
     actorName : Text,
     postId : ?Nat,
     postText : ?Text,
-    callRequestId : ?Nat
+    callRequestId : ?Nat,
   ) {
     let id = nextNotificationId;
     nextNotificationId += 1;
@@ -184,6 +192,319 @@ actor {
     notifications.add(id, notif);
   };
 
+  // Helper function to check if userA blocked userB
+  func isUserBlocked(userA : Text, userB : Text) : Bool {
+    switch (blockList.get(userA)) {
+      case (?blocks) { blocks.contains(userB) };
+      case (null) { false };
+    };
+  };
+
+  // Helper function to check if either user blocked the other
+  func areUsersBlocked(userA : Text, userB : Text) : Bool {
+    isUserBlocked(userA, userB) or isUserBlocked(userB, userA)
+  };
+
+  // ---- New Features ----
+
+  // 1. Display name change with 15-day lock
+  public shared func updateLocalUserDisplayName(token : SessionToken, newDisplayName : Text) : async Text {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let localUser = switch (localUsers.get(username)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Local user not found") };
+    };
+    let now = Time.now();
+    let daysInNs : Int = 15 * 24 * 60 * 60 * 1000000000;
+    switch (localUser.lastNameChange) {
+      case (null) { /* Allow if never changed */ };
+      case (?lastChange) {
+        let elapsed = now - lastChange;
+        if (elapsed < daysInNs) {
+          let remainingDays : Nat = ((daysInNs - elapsed) / (24 * 60 * 60 * 1000000000)).toNat();
+          return "locked:" # remainingDays.toText();
+        };
+      };
+    };
+    let updatedUser : LocalUser = { localUser with displayName = newDisplayName; lastNameChange = ?now };
+    localUsers.add(username, updatedUser);
+    "ok";
+  };
+
+  // 2. Follow/Unfollow system
+  let followers = Map.empty<Text, Set.Set<Text>>();
+  let following = Map.empty<Text, Set.Set<Text>>();
+
+  public shared func followUser(token : SessionToken, targetUsername : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    if (username == targetUsername) {
+      Runtime.trap("Cannot follow yourself");
+    };
+    // Check if blocked
+    if (areUsersBlocked(username, targetUsername)) {
+      Runtime.trap("Cannot follow: blocked relationship exists");
+    };
+    // Check if target user exists
+    if (not localUsers.containsKey(targetUsername)) {
+      Runtime.trap("Target user not found");
+    };
+    let myFollowing = switch (following.get(username)) {
+      case (?f) { f };
+      case (null) { Set.empty<Text>() };
+    };
+    if (myFollowing.contains(targetUsername)) {
+      Runtime.trap("Already following");
+    };
+    myFollowing.add(targetUsername);
+    following.add(username, myFollowing);
+    let theirFollowers = switch (followers.get(targetUsername)) {
+      case (?f) { f };
+      case (null) { Set.empty<Text>() };
+    };
+    theirFollowers.add(username);
+    followers.add(targetUsername, theirFollowers);
+  };
+
+  public shared func unfollowUser(token : SessionToken, targetUsername : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let myFollowing = switch (following.get(username)) {
+      case (?f) { f };
+      case (null) { Set.empty<Text>() };
+    };
+    if (not myFollowing.contains(targetUsername)) {
+      Runtime.trap("Not following");
+    };
+    myFollowing.remove(targetUsername);
+    following.add(username, myFollowing);
+
+    let theirFollowers = switch (followers.get(targetUsername)) {
+      case (?f) { f };
+      case (null) { Set.empty<Text>() };
+    };
+    theirFollowers.remove(username);
+    followers.add(targetUsername, theirFollowers);
+  };
+
+  public query func getFollowers(token : SessionToken, username : Text) : async [Text] {
+    let callerUsername = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    // Check if caller is blocked by the target user
+    if (callerUsername != username and isUserBlocked(username, callerUsername)) {
+      Runtime.trap("Unauthorized: You are blocked by this user");
+    };
+    // Check privacy settings
+    let settings = switch (profileSettings.get(username)) {
+      case (?s) { s };
+      case (null) { { hideFollowers = false; hideFollowing = false } };
+    };
+    // Only allow viewing if: it's your own profile OR followers are not hidden
+    if (callerUsername != username and settings.hideFollowers) {
+      Runtime.trap("Unauthorized: This user's followers list is private");
+    };
+    switch (followers.get(username)) {
+      case (?f) {
+        // Filter out users who have blocked the caller
+        f.toArray().filter(func(follower : Text) : Bool {
+          not areUsersBlocked(callerUsername, follower)
+        })
+      };
+      case (null) { [] };
+    };
+  };
+
+  public query func getFollowing(token : SessionToken, username : Text) : async [Text] {
+    let callerUsername = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    // Check if caller is blocked by the target user
+    if (callerUsername != username and isUserBlocked(username, callerUsername)) {
+      Runtime.trap("Unauthorized: You are blocked by this user");
+    };
+    // Check privacy settings
+    let settings = switch (profileSettings.get(username)) {
+      case (?s) { s };
+      case (null) { { hideFollowers = false; hideFollowing = false } };
+    };
+    // Only allow viewing if: it's your own profile OR following list is not hidden
+    if (callerUsername != username and settings.hideFollowing) {
+      Runtime.trap("Unauthorized: This user's following list is private");
+    };
+    switch (following.get(username)) {
+      case (?f) {
+        // Filter out users who have blocked the caller
+        f.toArray().filter(func(followed : Text) : Bool {
+          not areUsersBlocked(callerUsername, followed)
+        })
+      };
+      case (null) { [] };
+    };
+  };
+
+  public query func isFollowing(token : SessionToken, targetUsername : Text) : async Bool {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (following.get(username)) {
+      case (?f) { f.contains(targetUsername) };
+      case (null) { false };
+    };
+  };
+
+  // 3. Block feature
+  let blockList = Map.empty<Text, Set.Set<Text>>();
+
+  public shared func blockUser(token : SessionToken, targetUsername : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    if (username == targetUsername) {
+      Runtime.trap("Cannot block yourself");
+    };
+    // Check if target user exists
+    if (not localUsers.containsKey(targetUsername)) {
+      Runtime.trap("Target user not found");
+    };
+    let myBlocks = switch (blockList.get(username)) {
+      case (?b) { b };
+      case (null) { Set.empty<Text>() };
+    };
+    if (myBlocks.contains(targetUsername)) {
+      Runtime.trap("Already blocked");
+    };
+    myBlocks.add(targetUsername);
+    blockList.add(username, myBlocks);
+    // Remove follow relationships
+    switch (followers.get(username)) {
+      case (?f) {
+        if (f.contains(targetUsername)) {
+          f.remove(targetUsername);
+          followers.add(username, f);
+        };
+      };
+      case (null) {};
+    };
+    switch (following.get(targetUsername)) {
+      case (?f) {
+        if (f.contains(username)) {
+          f.remove(username);
+          following.add(targetUsername, f);
+        };
+      };
+      case (null) {};
+    };
+    switch (following.get(username)) {
+      case (?f) {
+        if (f.contains(targetUsername)) {
+          f.remove(targetUsername);
+          following.add(username, f);
+        };
+      };
+      case (null) {};
+    };
+    switch (followers.get(targetUsername)) {
+      case (?f) {
+        if (f.contains(username)) {
+          f.remove(username);
+          followers.add(targetUsername, f);
+        };
+      };
+      case (null) {};
+    };
+  };
+
+  public shared func unblockUser(token : SessionToken, targetUsername : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let myBlocks = switch (blockList.get(username)) {
+      case (?b) { b };
+      case (null) { Set.empty<Text>() };
+    };
+    if (not myBlocks.contains(targetUsername)) {
+      Runtime.trap("Not blocked");
+    };
+    myBlocks.remove(targetUsername);
+    blockList.add(username, myBlocks);
+  };
+
+  public query func getBlockedUsers(token : SessionToken) : async [Text] {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (blockList.get(username)) {
+      case (?b) { b.toArray() };
+      case (null) { [] };
+    };
+  };
+
+  public query func isBlocked(token : SessionToken, targetUsername : Text) : async Bool {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (blockList.get(username)) {
+      case (?b) { b.contains(targetUsername) };
+      case (null) { false };
+    };
+  };
+
+  public query func isBlockedBy(token : SessionToken, targetUsername : Text) : async Bool {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (blockList.get(targetUsername)) {
+      case (?b) { b.contains(username) };
+      case (null) { false };
+    };
+  };
+
+  // 4. Profile settings
+  let profileSettings = Map.empty<Text, ProfileSettings>();
+
+  public query func getProfileSettings(token : SessionToken) : async ProfileSettings {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (profileSettings.get(username)) {
+      case (?s) { s };
+      case (null) { { hideFollowers = false; hideFollowing = false } };
+    };
+  };
+
+  public shared func updateProfileSettings(token : SessionToken, hideFollowers : Bool, hideFollowing : Bool) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let settings : ProfileSettings = { hideFollowers; hideFollowing };
+    profileSettings.add(username, settings);
+  };
+
+  public query func getPublicProfileSettings(username : Text) : async ProfileSettings {
+    switch (profileSettings.get(username)) {
+      case (?s) { s };
+      case (null) { { hideFollowers = false; hideFollowing = false } };
+    };
+  };
+
   // ---- Notifications ----
 
   public query func getNotificationsAsLocal(token : SessionToken) : async [Notification] {
@@ -194,7 +515,7 @@ actor {
     let mine = notifications.values().toArray().filter(
       func(n : Notification) : Bool { n.recipientUsername == username }
     );
-    mine
+    mine;
   };
 
   public shared func markNotificationReadAsLocal(token : SessionToken, id : Nat) : async () {
@@ -204,9 +525,10 @@ actor {
     };
     switch (notifications.get(id)) {
       case (?n) {
-        if (n.recipientUsername == username) {
-          notifications.add(id, { n with isRead = true });
+        if (n.recipientUsername != username) {
+          Runtime.trap("Unauthorized: Can only mark your own notifications as read");
         };
+        notifications.add(id, { n with isRead = true });
       };
       case (null) {};
     };
@@ -235,6 +557,10 @@ actor {
     if (not localUsers.containsKey(recipientUsername)) {
       Runtime.trap("Recipient user not found");
     };
+    // Check if blocked
+    if (areUsersBlocked(senderUsername, recipientUsername)) {
+      Runtime.trap("Cannot send message: blocked relationship exists");
+    };
     let id = nextDmId;
     nextDmId += 1;
     let dm : DirectMessage = {
@@ -254,6 +580,10 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
+    // Check if blocked
+    if (areUsersBlocked(username, otherUsername)) {
+      return [];
+    };
     directMessages.values().toArray().filter(
       func(dm : DirectMessage) : Bool {
         (dm.senderUsername == username and dm.recipientUsername == otherUsername) or
@@ -267,25 +597,28 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
-    // Collect all DMs involving this user
     let myDms = directMessages.values().toArray().filter(
       func(dm : DirectMessage) : Bool {
         dm.senderUsername == username or dm.recipientUsername == username
       }
     );
-    // Build conversation map: otherUsername -> (lastMessage, lastTimestamp, unreadCount)
     let convMap = Map.empty<Text, (Text, Time.Time, Nat)>();
     for (dm in myDms.values()) {
       let other = if (dm.senderUsername == username) { dm.recipientUsername } else { dm.senderUsername };
-      let unreadIncrement = if (dm.recipientUsername == username and not dm.isRead) { 1 } else { 0 };
-      switch (convMap.get(other)) {
-        case (null) {
-          convMap.add(other, (dm.text, dm.timestamp, unreadIncrement));
-        };
-        case (?(lastMsg, lastTs, unread)) {
-          let newTs = if (dm.timestamp > lastTs) { dm.timestamp } else { lastTs };
-          let newMsg = if (dm.timestamp > lastTs) { dm.text } else { lastMsg };
-          convMap.add(other, (newMsg, newTs, unread + unreadIncrement));
+      // Skip blocked users
+      if (areUsersBlocked(username, other)) {
+        // Continue to next iteration
+      } else {
+        let unreadIncrement = if (dm.recipientUsername == username and not dm.isRead) { 1 } else { 0 };
+        switch (convMap.get(other)) {
+          case (null) {
+            convMap.add(other, (dm.text, dm.timestamp, unreadIncrement));
+          };
+          case (?(lastMsg, lastTs, unread)) {
+            let newTs = if (dm.timestamp > lastTs) { dm.timestamp } else { lastTs };
+            let newMsg = if (dm.timestamp > lastTs) { dm.text } else { lastMsg };
+            convMap.add(other, (newMsg, newTs, unread + unreadIncrement));
+          };
         };
       };
     };
@@ -322,7 +655,7 @@ actor {
     };
     directMessages.values().toArray().filter(
       func(dm : DirectMessage) : Bool {
-        dm.recipientUsername == username and not dm.isRead
+        dm.recipientUsername == username and not dm.isRead and not areUsersBlocked(username, dm.senderUsername)
       }
     ).size();
   };
@@ -344,7 +677,12 @@ actor {
       isMicActive = false;
     };
     voiceParticipants.add(username, participant);
-    voiceParticipants.values().toArray();
+    // Return participants, filtering out blocked users
+    voiceParticipants.values().toArray().filter(
+      func(p : VoiceParticipant) : Bool {
+        not areUsersBlocked(username, p.username)
+      }
+    );
   };
 
   public shared func leaveVoiceChannel(token : SessionToken) : async () {
@@ -362,16 +700,26 @@ actor {
   };
 
   public query func getVoiceParticipants(token : SessionToken) : async [VoiceParticipant] {
-    switch (validateToken(token)) {
-      case (?_) { voiceParticipants.values().toArray() };
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
+    // Filter out blocked users
+    voiceParticipants.values().toArray().filter(
+      func(p : VoiceParticipant) : Bool {
+        not areUsersBlocked(username, p.username)
+      }
+    );
   };
 
   public shared func sendSignal(token : SessionToken, toUsername : Text, signalType : Text, data : Text) : async () {
     let fromUsername = switch (validateToken(token)) {
       case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    // Check if blocked
+    if (areUsersBlocked(fromUsername, toUsername)) {
+      Runtime.trap("Cannot send signal: blocked relationship exists");
     };
     let id = nextSignalId;
     nextSignalId += 1;
@@ -391,7 +739,6 @@ actor {
       case (?u) { u };
       case (null) { return [] };
     };
-    // Expire signals older than 90 seconds to prevent stale ICE delivery
     let expiryNs : Int = 90_000_000_000;
     let now = Time.now();
     for ((id, s) in voiceSignals.entries().toArray().values()) {
@@ -400,9 +747,13 @@ actor {
       };
     };
     let mine = voiceSignals.entries().toArray().filter(
-      func((id, s)) { s.toUsername == username }
+      func((id, s)) {
+        s.toUsername == username and not areUsersBlocked(username, s.fromUsername)
+      }
     ).map(func((id, s)) { s });
-    for ((id, _) in voiceSignals.entries().toArray().filter(func((id, s)) { s.toUsername == username }).values()) {
+    for ((id, _) in voiceSignals.entries().toArray().filter(
+      func((id, s)) { s.toUsername == username }
+    ).values()) {
       voiceSignals.remove(id);
     };
     mine;
@@ -468,10 +819,26 @@ actor {
   };
 
   public query func getPostsAsLocal(token : SessionToken) : async [Post] {
-    switch (validateToken(token)) {
-      case (?_) { posts.values().toArray() };
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
+    // Filter out posts from blocked users
+    posts.values().toArray().filter(
+      func(post : Post) : Bool {
+        // Find the username of the post author
+        let authorUsername = localUsers.entries().toArray().filter(
+          func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == post.authorName }
+        );
+        switch (authorUsername.size()) {
+          case (0) { true }; // Keep posts from non-local users
+          case (_) {
+            let (postAuthor, _) = authorUsername[0];
+            not areUsersBlocked(username, postAuthor)
+          };
+        };
+      }
+    );
   };
 
   public shared ({ caller }) func deletePost(id : Nat) : async () {
@@ -576,6 +943,24 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Local user not found") };
     };
+    // Check if post exists and if blocked
+    switch (posts.get(postId)) {
+      case (?post) {
+        let ownerEntry = localUsers.entries().toArray().filter(
+          func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == post.authorName }
+        );
+        switch (ownerEntry.size()) {
+          case (0) {}; // Non-local post author
+          case (_) {
+            let (ownerUsername, _) = ownerEntry[0];
+            if (areUsersBlocked(username, ownerUsername)) {
+              Runtime.trap("Cannot comment: blocked relationship exists");
+            };
+          };
+        };
+      };
+      case (null) { Runtime.trap("Post not found") };
+    };
     let id = nextId;
     nextId += 1;
     let comment : Comment = {
@@ -603,7 +988,7 @@ actor {
                 localUser.displayName,
                 ?postId,
                 ?post.text,
-                null
+                null,
               );
             };
           };
@@ -624,14 +1009,28 @@ actor {
   };
 
   public query func getCommentsForPostAsLocal(token : SessionToken, postId : Nat) : async [Comment] {
-    switch (validateToken(token)) {
-      case (?_) {
-        let filtered = comments.values().toArray().filter(func(c) { c.postId == postId });
-        let sorted = quicksortComments(filtered);
-        sorted;
-      };
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
+    let filtered = comments.values().toArray().filter(
+      func(c) {
+        if (c.postId != postId) { return false };
+        // Filter out comments from blocked users
+        let commentAuthorEntry = localUsers.entries().toArray().filter(
+          func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == c.authorName }
+        );
+        switch (commentAuthorEntry.size()) {
+          case (0) { true }; // Keep comments from non-local users
+          case (_) {
+            let (commentAuthor, _) = commentAuthorEntry[0];
+            not areUsersBlocked(username, commentAuthor)
+          };
+        };
+      }
+    );
+    let sorted = quicksortComments(filtered);
+    sorted;
   };
 
   public shared ({ caller }) func deleteComment(id : Nat) : async () {
@@ -719,6 +1118,24 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Local user not found") };
     };
+    // Check if post exists and if blocked
+    switch (posts.get(postId)) {
+      case (?post) {
+        let ownerEntry = localUsers.entries().toArray().filter(
+          func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == post.authorName }
+        );
+        switch (ownerEntry.size()) {
+          case (0) {}; // Non-local post author
+          case (_) {
+            let (ownerUsername, _) = ownerEntry[0];
+            if (areUsersBlocked(username, ownerUsername)) {
+              Runtime.trap("Cannot like: blocked relationship exists");
+            };
+          };
+        };
+      };
+      case (null) { Runtime.trap("Post not found") };
+    };
     let author = getLocalUserPrincipal(username);
     let postLikes = switch (likes.get(postId)) {
       case (?pl) { pl };
@@ -743,7 +1160,7 @@ actor {
                 localUser.displayName,
                 ?postId,
                 ?post.text,
-                null
+                null,
               );
             };
           };
@@ -771,14 +1188,29 @@ actor {
   };
 
   public query func getPostLikesAsLocal(token : SessionToken, postId : Nat) : async [Text] {
-    switch (validateToken(token)) {
-      case (?_) {
-        switch (likes.get(postId)) {
-          case (?postLikes) { postLikes.values().toArray() };
-          case (null) { [] };
-        };
-      };
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (likes.get(postId)) {
+      case (?postLikes) {
+        // Filter out likes from blocked users
+        postLikes.entries().toArray().filter(
+          func((principal, displayName) : (Principal, Text)) : Bool {
+            let likerEntry = localUsers.entries().toArray().filter(
+              func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == displayName }
+            );
+            switch (likerEntry.size()) {
+              case (0) { true }; // Keep likes from non-local users
+              case (_) {
+                let (liker, _) = likerEntry[0];
+                not areUsersBlocked(username, liker)
+              };
+            };
+          }
+        ).map(func((_, displayName) : (Principal, Text)) : Text { displayName })
+      };
+      case (null) { [] };
     };
   };
 
@@ -790,7 +1222,7 @@ actor {
     };
     let id = nextId;
     nextId += 1;
-    let callRequest : CallRequest = { id; caller = caller; callee; timestamp = Time.now() };
+    let callRequest : CallRequest = { id; caller; callee; timestamp = Time.now() };
     callRequests.add(id, callRequest);
     id;
   };
@@ -884,6 +1316,10 @@ actor {
     if (not localUsers.containsKey(calleeUsername)) {
       Runtime.trap("Callee user not found");
     };
+    // Check if blocked
+    if (areUsersBlocked(callerUsername, calleeUsername)) {
+      Runtime.trap("Cannot send call request: blocked relationship exists");
+    };
     let id = nextId;
     nextId += 1;
     let req : LocalCallRequest = {
@@ -904,7 +1340,7 @@ actor {
       callerUser.displayName,
       null,
       null,
-      ?id
+      ?id,
     );
     id;
   };
@@ -916,7 +1352,8 @@ actor {
     };
     localCallRequests.values().toArray().filter(
       func(cr : LocalCallRequest) : Bool {
-        cr.callerUsername == username or cr.calleeUsername == username
+        (cr.callerUsername == username or cr.calleeUsername == username) and
+        not areUsersBlocked(username, if (cr.callerUsername == username) { cr.calleeUsername } else { cr.callerUsername })
       }
     );
   };
@@ -929,6 +1366,10 @@ actor {
     switch (localCallRequests.get(id)) {
       case (?cr) {
         if (cr.calleeUsername != username) { Runtime.trap("Unauthorized: Only the callee can accept") };
+        // Check if blocked
+        if (areUsersBlocked(cr.callerUsername, cr.calleeUsername)) {
+          Runtime.trap("Cannot accept: blocked relationship exists");
+        };
         localCallRequests.add(id, { cr with status = #accepted });
       };
       case (null) { Runtime.trap("Call request not found") };
@@ -1009,12 +1450,12 @@ actor {
     passwordHash : Text,
     displayName : Text,
     age : Nat,
-    photo : ?Storage.ExternalBlob
+    photo : ?Storage.ExternalBlob,
   ) : async () {
     if (localUsers.containsKey(username)) {
       Runtime.trap("Username already exists");
     };
-    let localUser : LocalUser = { username; passwordHash; displayName; age; photo };
+    let localUser : LocalUser = { username; passwordHash; displayName; age; photo; lastNameChange = null };
     localUsers.add(username, localUser);
   };
 
@@ -1033,7 +1474,7 @@ actor {
   };
 
   public query func validateSessionToken(token : SessionToken) : async ?Text {
-    validateToken(token)
+    validateToken(token);
   };
 
   public shared func logoutLocalAccount(token : SessionToken) : async () {
@@ -1045,7 +1486,7 @@ actor {
       case (?u) { u };
       case (null) { return null };
     };
-    localUsers.get(username)
+    localUsers.get(username);
   };
 
   public shared func updateLocalUserPhoto(token : SessionToken, photo : Storage.ExternalBlob) : async () {
@@ -1062,7 +1503,7 @@ actor {
   };
 
   public query ({ caller }) func getLocalUsers() : async [LocalUser] {
-    localUsers.values().toArray()
+    localUsers.values().toArray();
   };
 
   public shared ({ caller }) func createUser(name : Text, fname : Text, telephone : Text) : async () {
@@ -1143,10 +1584,25 @@ actor {
   };
 
   public query func getMessagesAsLocal(token : SessionToken) : async [Message] {
-    switch (validateToken(token)) {
-      case (?_) { messages.values().toArray() };
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
+    // Filter out messages from blocked users
+    messages.values().toArray().filter(
+      func(msg : Message) : Bool {
+        let authorEntry = localUsers.entries().toArray().filter(
+          func((u, lu) : (Text, LocalUser)) : Bool { lu.displayName == msg.authorName }
+        );
+        switch (authorEntry.size()) {
+          case (0) { true }; // Keep messages from non-local users
+          case (_) {
+            let (msgAuthor, _) = authorEntry[0];
+            not areUsersBlocked(username, msgAuthor)
+          };
+        };
+      }
+    );
   };
 
   public query ({ caller }) func getUser(principal : Principal) : async ?User {

@@ -89,13 +89,36 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface CallRequest {
+export interface Signal {
     id: bigint;
+    data: string;
+    toUsername: string;
     timestamp: Time;
-    callee: Principal;
-    caller: Principal;
+    fromUsername: string;
+    signalType: string;
+}
+export interface DirectMessage {
+    id: bigint;
+    text: string;
+    senderUsername: string;
+    isRead: boolean;
+    timestamp: Time;
+    recipientUsername: string;
+}
+export interface VoiceParticipant {
+    username: string;
+    displayName: string;
+    isMicActive: boolean;
 }
 export type Time = bigint;
+export interface Comment {
+    id: bigint;
+    text: string;
+    authorName: string;
+    author: Principal;
+    timestamp: Time;
+    postId: bigint;
+}
 export interface User {
     fname: string;
     principal: Principal;
@@ -107,6 +130,51 @@ export interface User {
 export interface _CaffeineStorageRefillInformation {
     proposed_top_up_amount?: bigint;
 }
+export interface _CaffeineStorageCreateCertificateResult {
+    method: string;
+    blob_hash: string;
+}
+export interface LocalCallRequest {
+    id: bigint;
+    status: CallStatus;
+    callerUsername: string;
+    timestamp: Time;
+    calleeUsername: string;
+}
+export interface LocalUser {
+    age: bigint;
+    username: string;
+    displayName: string;
+    lastNameChange?: Time;
+    passwordHash: string;
+    photo?: ExternalBlob;
+}
+export interface CallRequestWithStatus {
+    id: bigint;
+    status: CallStatus;
+    timestamp: Time;
+    callee: Principal;
+    caller: Principal;
+}
+export interface Post {
+    id: bigint;
+    text: string;
+    authorName: string;
+    author: Principal;
+    timestamp: Time;
+}
+export type SessionToken = bigint;
+export interface Notification {
+    id: bigint;
+    postText?: string;
+    callRequestId?: bigint;
+    actorName: string;
+    notifType: NotificationType;
+    isRead: boolean;
+    timestamp: Time;
+    recipientUsername: string;
+    postId?: bigint;
+}
 export interface Message {
     id: bigint;
     text: string;
@@ -114,9 +182,16 @@ export interface Message {
     author: Principal;
     timestamp: Time;
 }
-export interface _CaffeineStorageCreateCertificateResult {
-    method: string;
-    blob_hash: string;
+export interface ProfileSettings {
+    hideFollowers: boolean;
+    hideFollowing: boolean;
+}
+export interface ConversationSummary {
+    otherUsername: string;
+    lastMessage: string;
+    unreadCount: bigint;
+    lastTimestamp: Time;
+    otherDisplayName: string;
 }
 export interface UserProfile {
     fname: string;
@@ -128,45 +203,21 @@ export interface _CaffeineStorageRefillResult {
     success?: boolean;
     topped_up_amount?: bigint;
 }
+export enum CallStatus {
+    pending = "pending",
+    denied = "denied",
+    ended = "ended",
+    accepted = "accepted"
+}
+export enum NotificationType {
+    like = "like",
+    comment = "comment",
+    callRequest = "callRequest"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
     guest = "guest"
-}
-export interface LocalUser {
-    username: string;
-    displayName: string;
-    passwordHash: string;
-    age: bigint;
-    photo?: ExternalBlob;
-}
-export interface Post {
-    id: bigint;
-    author: any;
-    authorName: string;
-    text: string;
-    timestamp: Time;
-}
-export interface Comment {
-    id: bigint;
-    postId: bigint;
-    author: any;
-    authorName: string;
-    text: string;
-    timestamp: Time;
-}
-export interface VoiceParticipant {
-    username: string;
-    displayName: string;
-    isMicActive: boolean;
-}
-export interface Signal {
-    id: bigint;
-    fromUsername: string;
-    toUsername: string;
-    signalType: string;
-    data: string;
-    timestamp: Time;
 }
 export interface backendInterface {
     _caffeineStorageBlobIsLive(hash: Uint8Array): Promise<boolean>;
@@ -176,53 +227,93 @@ export interface backendInterface {
     _caffeineStorageRefillCashier(refillInformation: _CaffeineStorageRefillInformation | null): Promise<_CaffeineStorageRefillResult>;
     _caffeineStorageUpdateGatewayPrincipals(): Promise<void>;
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    acceptCallRequest(id: bigint): Promise<void>;
+    acceptCallRequestAsLocal(token: SessionToken, id: bigint): Promise<void>;
+    addComment(postId: bigint, text: string): Promise<bigint>;
+    addCommentAsLocal(token: SessionToken, postId: bigint, text: string): Promise<bigint>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    assignRole(user: Principal, role: UserRole): Promise<void>;
+    blockUser(token: SessionToken, targetUsername: string): Promise<void>;
+    createPost(text: string): Promise<bigint>;
+    createPostAsLocal(token: SessionToken, text: string): Promise<bigint>;
     createUser(name: string, fname: string, telephone: string): Promise<void>;
+    deleteCallRequest(id: bigint): Promise<void>;
+    deleteComment(id: bigint): Promise<void>;
+    deleteCommentAsLocal(token: SessionToken, id: bigint): Promise<void>;
+    deletePost(id: bigint): Promise<void>;
+    deletePostAsLocal(token: SessionToken, id: bigint): Promise<void>;
     deleteUser(targetUser: Principal): Promise<void>;
-    getCallRequest(id: bigint): Promise<CallRequest | null>;
-    getCallRequests(): Promise<Array<CallRequest>>;
+    denyCallRequest(id: bigint): Promise<void>;
+    denyCallRequestAsLocal(token: SessionToken, id: bigint): Promise<void>;
+    endCall(id: bigint): Promise<void>;
+    endCallAsLocal(token: SessionToken, id: bigint): Promise<void>;
+    followUser(token: SessionToken, targetUsername: string): Promise<void>;
+    getBlockedUsers(token: SessionToken): Promise<Array<string>>;
+    getCallRequest(id: bigint): Promise<CallRequestWithStatus | null>;
+    getCallRequests(): Promise<Array<CallRequestWithStatus>>;
+    getCallRequestsAsLocal(token: SessionToken): Promise<Array<LocalCallRequest>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getCommentsForPost(postId: bigint): Promise<Array<Comment>>;
+    getCommentsForPostAsLocal(token: SessionToken, postId: bigint): Promise<Array<Comment>>;
+    getConversations(token: SessionToken): Promise<Array<ConversationSummary>>;
+    getDirectMessages(token: SessionToken, otherUsername: string): Promise<Array<DirectMessage>>;
+    getFollowers(token: SessionToken, username: string): Promise<Array<string>>;
+    getFollowing(token: SessionToken, username: string): Promise<Array<string>>;
+    getLocalUserProfile(token: SessionToken): Promise<LocalUser | null>;
+    getLocalUsers(): Promise<Array<LocalUser>>;
     getMessage(id: bigint): Promise<Message | null>;
     getMessages(): Promise<Array<Message>>;
+    getMessagesAsLocal(token: SessionToken): Promise<Array<Message>>;
+    getMySignals(token: SessionToken): Promise<Array<Signal>>;
+    getNotificationsAsLocal(token: SessionToken): Promise<Array<Notification>>;
+    getPostLikes(postId: bigint): Promise<Array<string>>;
+    getPostLikesAsLocal(token: SessionToken, postId: bigint): Promise<Array<string>>;
+    getPosts(): Promise<Array<Post>>;
+    getPostsAsLocal(token: SessionToken): Promise<Array<Post>>;
+    getProfileSettings(token: SessionToken): Promise<ProfileSettings>;
+    getPublicProfileSettings(username: string): Promise<ProfileSettings>;
+    getUnreadDMCount(token: SessionToken): Promise<bigint>;
     getUser(principal: Principal): Promise<User | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(): Promise<Array<User>>;
     getUsersCount(): Promise<bigint>;
+    getVoiceParticipants(token: SessionToken): Promise<Array<VoiceParticipant>>;
+    isBlocked(token: SessionToken, targetUsername: string): Promise<boolean>;
+    isBlockedBy(token: SessionToken, targetUsername: string): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
-    saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    verifyUser(): Promise<void>;
+    isFollowing(token: SessionToken, targetUsername: string): Promise<boolean>;
+    joinVoiceChannel(token: SessionToken): Promise<Array<VoiceParticipant>>;
+    leaveVoiceChannel(token: SessionToken): Promise<void>;
+    likePost(postId: bigint): Promise<void>;
+    likePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
+    loginLocalAccount(username: string, passwordHash: string): Promise<SessionToken>;
+    logoutLocalAccount(token: SessionToken): Promise<void>;
+    markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
+    markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
+    markNotificationReadAsLocal(token: SessionToken, id: bigint): Promise<void>;
     registerLocalAccount(username: string, passwordHash: string, displayName: string, age: bigint, photo: ExternalBlob | null): Promise<void>;
-    loginLocalAccount(username: string, passwordHash: string): Promise<bigint>;
-    logoutLocalAccount(token: bigint): Promise<void>;
-    validateSessionToken(token: bigint): Promise<string | null>;
-    getLocalUserProfile(token: bigint): Promise<LocalUser | null>;
-    updateLocalUserPhoto(token: bigint, photo: ExternalBlob): Promise<void>;
-    getLocalUsers(): Promise<Array<LocalUser>>;
-    sendDirectMessage(token: bigint, recipientUsername: string, text: string): Promise<bigint>;
-    getDirectMessages(token: bigint, otherUsername: string): Promise<Array<any>>;
-    getConversations(token: bigint): Promise<Array<any>>;
-    markDirectMessagesRead(token: bigint, otherUsername: string): Promise<void>;
-    getUnreadDMCount(token: bigint): Promise<bigint>;
-    sendMessageAsLocal(token: bigint, text: string): Promise<bigint>;
-    getMessagesAsLocal(token: bigint): Promise<Array<Message>>;
-    createPostAsLocal(token: bigint, text: string): Promise<bigint>;
-    getPostsAsLocal(token: bigint): Promise<Array<Post>>;
-    deletePostAsLocal(token: bigint, id: bigint): Promise<void>;
-    likePostAsLocal(token: bigint, postId: bigint): Promise<void>;
-    unlikePostAsLocal(token: bigint, postId: bigint): Promise<void>;
-    getPostLikesAsLocal(token: bigint, postId: bigint): Promise<Array<string>>;
-    addCommentAsLocal(token: bigint, postId: bigint, text: string): Promise<bigint>;
-    getCommentsForPostAsLocal(token: bigint, postId: bigint): Promise<Array<Comment>>;
-    deleteCommentAsLocal(token: bigint, id: bigint): Promise<void>;
-    joinVoiceChannel(token: bigint): Promise<Array<VoiceParticipant>>;
-    leaveVoiceChannel(token: bigint): Promise<void>;
-    getVoiceParticipants(token: bigint): Promise<Array<VoiceParticipant>>;
-    sendSignal(token: bigint, toUsername: string, signalType: string, data: string): Promise<void>;
-    getMySignals(token: bigint): Promise<Array<Signal>>;
-    setMicActive(token: bigint, active: boolean): Promise<void>;
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    sendCallRequest(callee: Principal): Promise<bigint>;
+    sendCallRequestAsLocal(token: SessionToken, calleeUsername: string): Promise<bigint>;
+    sendDirectMessage(token: SessionToken, recipientUsername: string, text: string): Promise<bigint>;
+    sendMessage(text: string): Promise<bigint>;
+    sendMessageAsLocal(token: SessionToken, text: string): Promise<bigint>;
+    sendSignal(token: SessionToken, toUsername: string, signalType: string, data: string): Promise<void>;
+    setMicActive(token: SessionToken, active: boolean): Promise<void>;
+    unblockUser(token: SessionToken, targetUsername: string): Promise<void>;
+    unfollowUser(token: SessionToken, targetUsername: string): Promise<void>;
+    unlikePost(postId: bigint): Promise<void>;
+    unlikePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
+    updateLocalUserDisplayName(token: SessionToken, newDisplayName: string): Promise<string>;
+    updateLocalUserPhoto(token: SessionToken, photo: ExternalBlob): Promise<void>;
+    updateProfileSettings(token: SessionToken, hideFollowers: boolean, hideFollowing: boolean): Promise<void>;
+    updateUser(photo: ExternalBlob): Promise<void>;
+    updateUserWithoutPhoto(name: string, fname: string, telephone: string): Promise<void>;
+    validateSessionToken(token: SessionToken): Promise<string | null>;
+    verifyUser(): Promise<void>;
 }
-import type { CallRequest as _CallRequest, ExternalBlob as _ExternalBlob, Message as _Message, User as _User, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
+import type { CallRequestWithStatus as _CallRequestWithStatus, CallStatus as _CallStatus, ExternalBlob as _ExternalBlob, LocalCallRequest as _LocalCallRequest, LocalUser as _LocalUser, Message as _Message, Notification as _Notification, NotificationType as _NotificationType, Time as _Time, User as _User, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _caffeineStorageBlobIsLive(arg0: Uint8Array): Promise<boolean> {
@@ -323,6 +414,62 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async acceptCallRequest(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.acceptCallRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.acceptCallRequest(arg0);
+            return result;
+        }
+    }
+    async acceptCallRequestAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.acceptCallRequestAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.acceptCallRequestAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async addComment(arg0: bigint, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addComment(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addComment(arg0, arg1);
+            return result;
+        }
+    }
+    async addCommentAsLocal(arg0: SessionToken, arg1: bigint, arg2: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addCommentAsLocal(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addCommentAsLocal(arg0, arg1, arg2);
+            return result;
+        }
+    }
     async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
         if (this.processError) {
             try {
@@ -334,6 +481,62 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n8(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async assignRole(arg0: Principal, arg1: UserRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignRole(arg0, to_candid_UserRole_n8(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignRole(arg0, to_candid_UserRole_n8(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async blockUser(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.blockUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.blockUser(arg0, arg1);
+            return result;
+        }
+    }
+    async createPost(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createPost(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createPost(arg0);
+            return result;
+        }
+    }
+    async createPostAsLocal(arg0: SessionToken, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createPostAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createPostAsLocal(arg0, arg1);
             return result;
         }
     }
@@ -351,6 +554,76 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async deleteCallRequest(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteCallRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteCallRequest(arg0);
+            return result;
+        }
+    }
+    async deleteComment(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteComment(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteComment(arg0);
+            return result;
+        }
+    }
+    async deleteCommentAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteCommentAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteCommentAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async deletePost(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deletePost(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deletePost(arg0);
+            return result;
+        }
+    }
+    async deletePostAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deletePostAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deletePostAsLocal(arg0, arg1);
+            return result;
+        }
+    }
     async deleteUser(arg0: Principal): Promise<void> {
         if (this.processError) {
             try {
@@ -365,7 +638,91 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getCallRequest(arg0: bigint): Promise<CallRequest | null> {
+    async denyCallRequest(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.denyCallRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.denyCallRequest(arg0);
+            return result;
+        }
+    }
+    async denyCallRequestAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.denyCallRequestAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.denyCallRequestAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async endCall(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.endCall(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.endCall(arg0);
+            return result;
+        }
+    }
+    async endCallAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.endCallAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.endCallAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async followUser(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.followUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.followUser(arg0, arg1);
+            return result;
+        }
+    }
+    async getBlockedUsers(arg0: SessionToken): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getBlockedUsers(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getBlockedUsers(arg0);
+            return result;
+        }
+    }
+    async getCallRequest(arg0: bigint): Promise<CallRequestWithStatus | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallRequest(arg0);
@@ -379,60 +736,186 @@ export class Backend implements backendInterface {
             return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getCallRequests(): Promise<Array<CallRequest>> {
+    async getCallRequests(): Promise<Array<CallRequestWithStatus>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallRequests();
-                return result;
+                return from_candid_vec_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallRequests();
-            return result;
+            return from_candid_vec_n15(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCallRequestsAsLocal(arg0: SessionToken): Promise<Array<LocalCallRequest>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallRequestsAsLocal(arg0);
+                return from_candid_vec_n16(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallRequestsAsLocal(arg0);
+            return from_candid_vec_n16(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserProfile(): Promise<UserProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n24(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n24(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCommentsForPost(arg0: bigint): Promise<Array<Comment>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCommentsForPost(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCommentsForPost(arg0);
+            return result;
+        }
+    }
+    async getCommentsForPostAsLocal(arg0: SessionToken, arg1: bigint): Promise<Array<Comment>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCommentsForPostAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCommentsForPostAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async getConversations(arg0: SessionToken): Promise<Array<ConversationSummary>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getConversations(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getConversations(arg0);
+            return result;
+        }
+    }
+    async getDirectMessages(arg0: SessionToken, arg1: string): Promise<Array<DirectMessage>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getDirectMessages(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getDirectMessages(arg0, arg1);
+            return result;
+        }
+    }
+    async getFollowers(arg0: SessionToken, arg1: string): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getFollowers(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getFollowers(arg0, arg1);
+            return result;
+        }
+    }
+    async getFollowing(arg0: SessionToken, arg1: string): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getFollowing(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getFollowing(arg0, arg1);
+            return result;
+        }
+    }
+    async getLocalUserProfile(arg0: SessionToken): Promise<LocalUser | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getLocalUserProfile(arg0);
+                return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getLocalUserProfile(arg0);
+            return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getLocalUsers(): Promise<Array<LocalUser>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getLocalUsers();
+                return from_candid_vec_n30(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getLocalUsers();
+            return from_candid_vec_n30(this._uploadFile, this._downloadFile, result);
         }
     }
     async getMessage(arg0: bigint): Promise<Message | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getMessage(arg0);
-                return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n31(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getMessage(arg0);
-            return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n31(this._uploadFile, this._downloadFile, result);
         }
     }
     async getMessages(): Promise<Array<Message>> {
@@ -449,46 +932,186 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getMessagesAsLocal(arg0: SessionToken): Promise<Array<Message>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMessagesAsLocal(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getMessagesAsLocal(arg0);
+            return result;
+        }
+    }
+    async getMySignals(arg0: SessionToken): Promise<Array<Signal>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMySignals(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getMySignals(arg0);
+            return result;
+        }
+    }
+    async getNotificationsAsLocal(arg0: SessionToken): Promise<Array<Notification>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getNotificationsAsLocal(arg0);
+                return from_candid_vec_n32(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getNotificationsAsLocal(arg0);
+            return from_candid_vec_n32(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getPostLikes(arg0: bigint): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPostLikes(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPostLikes(arg0);
+            return result;
+        }
+    }
+    async getPostLikesAsLocal(arg0: SessionToken, arg1: bigint): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPostLikesAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPostLikesAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async getPosts(): Promise<Array<Post>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPosts();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPosts();
+            return result;
+        }
+    }
+    async getPostsAsLocal(arg0: SessionToken): Promise<Array<Post>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPostsAsLocal(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPostsAsLocal(arg0);
+            return result;
+        }
+    }
+    async getProfileSettings(arg0: SessionToken): Promise<ProfileSettings> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProfileSettings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProfileSettings(arg0);
+            return result;
+        }
+    }
+    async getPublicProfileSettings(arg0: string): Promise<ProfileSettings> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPublicProfileSettings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPublicProfileSettings(arg0);
+            return result;
+        }
+    }
+    async getUnreadDMCount(arg0: SessionToken): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUnreadDMCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUnreadDMCount(arg0);
+            return result;
+        }
+    }
     async getUser(arg0: Principal): Promise<User | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUser(arg0);
-                return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n38(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUser(arg0);
-            return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n38(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUsers(): Promise<Array<User>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUsers();
-                return from_candid_vec_n22(this._uploadFile, this._downloadFile, result);
+                return from_candid_vec_n41(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUsers();
-            return from_candid_vec_n22(this._uploadFile, this._downloadFile, result);
+            return from_candid_vec_n41(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUsersCount(): Promise<bigint> {
@@ -502,6 +1125,48 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getUsersCount();
+            return result;
+        }
+    }
+    async getVoiceParticipants(arg0: SessionToken): Promise<Array<VoiceParticipant>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getVoiceParticipants(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getVoiceParticipants(arg0);
+            return result;
+        }
+    }
+    async isBlocked(arg0: SessionToken, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isBlocked(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isBlocked(arg0, arg1);
+            return result;
+        }
+    }
+    async isBlockedBy(arg0: SessionToken, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isBlockedBy(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isBlockedBy(arg0, arg1);
             return result;
         }
     }
@@ -519,18 +1184,410 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
+    async isFollowing(arg0: SessionToken, arg1: string): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveCallerUserProfile(await to_candid_UserProfile_n23(this._uploadFile, this._downloadFile, arg0));
+                const result = await this.actor.isFollowing(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveCallerUserProfile(await to_candid_UserProfile_n23(this._uploadFile, this._downloadFile, arg0));
+            const result = await this.actor.isFollowing(arg0, arg1);
             return result;
+        }
+    }
+    async joinVoiceChannel(arg0: SessionToken): Promise<Array<VoiceParticipant>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.joinVoiceChannel(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.joinVoiceChannel(arg0);
+            return result;
+        }
+    }
+    async leaveVoiceChannel(arg0: SessionToken): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.leaveVoiceChannel(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.leaveVoiceChannel(arg0);
+            return result;
+        }
+    }
+    async likePost(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.likePost(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.likePost(arg0);
+            return result;
+        }
+    }
+    async likePostAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.likePostAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.likePostAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async loginLocalAccount(arg0: string, arg1: string): Promise<SessionToken> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginLocalAccount(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginLocalAccount(arg0, arg1);
+            return result;
+        }
+    }
+    async logoutLocalAccount(arg0: SessionToken): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.logoutLocalAccount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.logoutLocalAccount(arg0);
+            return result;
+        }
+    }
+    async markAllNotificationsReadAsLocal(arg0: SessionToken): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.markAllNotificationsReadAsLocal(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.markAllNotificationsReadAsLocal(arg0);
+            return result;
+        }
+    }
+    async markDirectMessagesRead(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.markDirectMessagesRead(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.markDirectMessagesRead(arg0, arg1);
+            return result;
+        }
+    }
+    async markNotificationReadAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.markNotificationReadAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.markNotificationReadAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async registerLocalAccount(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: ExternalBlob | null): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerLocalAccount(arg0, arg1, arg2, arg3, await to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerLocalAccount(arg0, arg1, arg2, arg3, await to_candid_opt_n42(this._uploadFile, this._downloadFile, arg4));
+            return result;
+        }
+    }
+    async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveCallerUserProfile(await to_candid_UserProfile_n44(this._uploadFile, this._downloadFile, arg0));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveCallerUserProfile(await to_candid_UserProfile_n44(this._uploadFile, this._downloadFile, arg0));
+            return result;
+        }
+    }
+    async sendCallRequest(arg0: Principal): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendCallRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendCallRequest(arg0);
+            return result;
+        }
+    }
+    async sendCallRequestAsLocal(arg0: SessionToken, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendCallRequestAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendCallRequestAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async sendDirectMessage(arg0: SessionToken, arg1: string, arg2: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendDirectMessage(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendDirectMessage(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async sendMessage(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendMessage(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendMessage(arg0);
+            return result;
+        }
+    }
+    async sendMessageAsLocal(arg0: SessionToken, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendMessageAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendMessageAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async sendSignal(arg0: SessionToken, arg1: string, arg2: string, arg3: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendSignal(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendSignal(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async setMicActive(arg0: SessionToken, arg1: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setMicActive(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setMicActive(arg0, arg1);
+            return result;
+        }
+    }
+    async unblockUser(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.unblockUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.unblockUser(arg0, arg1);
+            return result;
+        }
+    }
+    async unfollowUser(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.unfollowUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.unfollowUser(arg0, arg1);
+            return result;
+        }
+    }
+    async unlikePost(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.unlikePost(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.unlikePost(arg0);
+            return result;
+        }
+    }
+    async unlikePostAsLocal(arg0: SessionToken, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.unlikePostAsLocal(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.unlikePostAsLocal(arg0, arg1);
+            return result;
+        }
+    }
+    async updateLocalUserDisplayName(arg0: SessionToken, arg1: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateLocalUserDisplayName(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateLocalUserDisplayName(arg0, arg1);
+            return result;
+        }
+    }
+    async updateLocalUserPhoto(arg0: SessionToken, arg1: ExternalBlob): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateLocalUserPhoto(arg0, await to_candid_ExternalBlob_n43(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateLocalUserPhoto(arg0, await to_candid_ExternalBlob_n43(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async updateProfileSettings(arg0: SessionToken, arg1: boolean, arg2: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateProfileSettings(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateProfileSettings(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async updateUser(arg0: ExternalBlob): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateUser(await to_candid_ExternalBlob_n43(this._uploadFile, this._downloadFile, arg0));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateUser(await to_candid_ExternalBlob_n43(this._uploadFile, this._downloadFile, arg0));
+            return result;
+        }
+    }
+    async updateUserWithoutPhoto(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateUserWithoutPhoto(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateUserWithoutPhoto(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async validateSessionToken(arg0: SessionToken): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.validateSessionToken(arg0);
+                return from_candid_opt_n35(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.validateSessionToken(arg0);
+            return from_candid_opt_n35(this._uploadFile, this._downloadFile, result);
         }
     }
     async verifyUser(): Promise<void> {
@@ -547,189 +1604,63 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-
-    async registerLocalAccount(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: ExternalBlob | null): Promise<void> {
-        const photoArg = arg4 ? candid_some(await this._uploadFile(arg4)) : candid_none();
-        const result = await this.actor.registerLocalAccount(arg0, arg1, arg2, arg3, photoArg);
-        return result;
-    }
-    async loginLocalAccount(arg0: string, arg1: string): Promise<bigint> {
-        const result = await this.actor.loginLocalAccount(arg0, arg1);
-        return result;
-    }
-    async logoutLocalAccount(arg0: bigint): Promise<void> {
-        const result = await this.actor.logoutLocalAccount(arg0);
-        return result;
-    }
-    async validateSessionToken(arg0: bigint): Promise<string | null> {
-        const result = await this.actor.validateSessionToken(arg0);
-        return result.length === 0 ? null : result[0];
-    }
-    async getLocalUserProfile(arg0: bigint): Promise<LocalUser | null> {
-        const result = await this.actor.getLocalUserProfile(arg0);
-        if (result.length === 0) return null;
-        const u = result[0];
-        return {
-            username: u.username,
-            displayName: u.displayName,
-            passwordHash: u.passwordHash,
-            age: u.age,
-            photo: u.photo.length === 0 ? undefined : await this._downloadFile(u.photo[0]),
-        };
-    }
-    async updateLocalUserPhoto(arg0: bigint, arg1: ExternalBlob): Promise<void> {
-        const uploaded = await this._uploadFile(arg1);
-        await this.actor.updateLocalUserPhoto(arg0, uploaded);
-    }
-    async getLocalUsers(): Promise<Array<LocalUser>> {
-        const result = await this.actor.getLocalUsers();
-        return Promise.all(result.map(async (u) => ({
-            username: u.username,
-            displayName: u.displayName,
-            passwordHash: u.passwordHash,
-            age: u.age,
-            photo: u.photo.length === 0 ? undefined : await this._downloadFile(u.photo[0]),
-        })));
-    }
-    async sendDirectMessage(arg0: bigint, arg1: string, arg2: string): Promise<bigint> {
-        return await this.actor.sendDirectMessage(arg0, arg1, arg2);
-    }
-    async getDirectMessages(arg0: bigint, arg1: string): Promise<Array<any>> {
-        return await this.actor.getDirectMessages(arg0, arg1);
-    }
-    async getConversations(arg0: bigint): Promise<Array<any>> {
-        return await this.actor.getConversations(arg0);
-    }
-    async markDirectMessagesRead(arg0: bigint, arg1: string): Promise<void> {
-        return await this.actor.markDirectMessagesRead(arg0, arg1);
-    }
-    async getUnreadDMCount(arg0: bigint): Promise<bigint> {
-        return await this.actor.getUnreadDMCount(arg0);
-    }
-    async sendMessageAsLocal(arg0: bigint, arg1: string): Promise<bigint> {
-        return await this.actor.sendMessageAsLocal(arg0, arg1);
-    }
-    async getMessagesAsLocal(arg0: bigint): Promise<Array<Message>> {
-        return await this.actor.getMessagesAsLocal(arg0);
-    }
-    async createPostAsLocal(arg0: bigint, arg1: string): Promise<bigint> {
-        return await this.actor.createPostAsLocal(arg0, arg1);
-    }
-    async getPostsAsLocal(arg0: bigint): Promise<Array<Post>> {
-        return await this.actor.getPostsAsLocal(arg0);
-    }
-    async deletePostAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.deletePostAsLocal(arg0, arg1);
-    }
-    async likePostAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.likePostAsLocal(arg0, arg1);
-    }
-    async unlikePostAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.unlikePostAsLocal(arg0, arg1);
-    }
-    async getPostLikesAsLocal(arg0: bigint, arg1: bigint): Promise<Array<string>> {
-        return await this.actor.getPostLikesAsLocal(arg0, arg1);
-    }
-    async addCommentAsLocal(arg0: bigint, arg1: bigint, arg2: string): Promise<bigint> {
-        return await this.actor.addCommentAsLocal(arg0, arg1, arg2);
-    }
-    async getCommentsForPostAsLocal(arg0: bigint, arg1: bigint): Promise<Array<Comment>> {
-        return await this.actor.getCommentsForPostAsLocal(arg0, arg1);
-    }
-    async deleteCommentAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.deleteCommentAsLocal(arg0, arg1);
-    }
-    async joinVoiceChannel(arg0: bigint): Promise<Array<VoiceParticipant>> {
-        return await this.actor.joinVoiceChannel(arg0);
-    }
-    async leaveVoiceChannel(arg0: bigint): Promise<void> {
-        return await this.actor.leaveVoiceChannel(arg0);
-    }
-    async getVoiceParticipants(arg0: bigint): Promise<Array<VoiceParticipant>> {
-        return await this.actor.getVoiceParticipants(arg0);
-    }
-    async sendSignal(arg0: bigint, arg1: string, arg2: string, arg3: string): Promise<void> {
-        return await this.actor.sendSignal(arg0, arg1, arg2, arg3);
-    }
-    async getMySignals(arg0: bigint): Promise<Array<Signal>> {
-        return await this.actor.getMySignals(arg0);
-    }
-    async setMicActive(arg0: bigint, arg1: boolean): Promise<void> {
-        return await this.actor.setMicActive(arg0, arg1);
-    }
-    async sendCallRequestAsLocal(arg0: bigint, arg1: string): Promise<bigint> {
-        const result = await this.actor.sendCallRequestAsLocal(arg0, arg1);
-        return result;
-    }
-    async getCallRequestsAsLocal(arg0: bigint): Promise<Array<any>> {
-        const result = await this.actor.getCallRequestsAsLocal(arg0);
-        return result.map((cr: any) => ({
-            id: cr.id,
-            callerUsername: cr.callerUsername,
-            calleeUsername: cr.calleeUsername,
-            status: 'pending' in cr.status ? 'pending' : 'accepted' in cr.status ? 'accepted' : 'denied' in cr.status ? 'denied' : 'ended',
-            timestamp: cr.timestamp,
-        }));
-    }
-    async acceptCallRequestAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.acceptCallRequestAsLocal(arg0, arg1);
-    }
-    async denyCallRequestAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.denyCallRequestAsLocal(arg0, arg1);
-    }
-    async endCallAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.endCallAsLocal(arg0, arg1);
-    }
-    async getNotificationsAsLocal(arg0: bigint): Promise<Array<any>> {
-        const result = await this.actor.getNotificationsAsLocal(arg0);
-        return result.map((n: any) => ({
-            id: n.id,
-            recipientUsername: n.recipientUsername,
-            notifType: 'like' in n.notifType ? 'like' : 'comment' in n.notifType ? 'comment' : 'callRequest',
-            actorName: n.actorName,
-            postId: n.postId.length > 0 ? n.postId[0] : null,
-            postText: n.postText.length > 0 ? n.postText[0] : null,
-            callRequestId: n.callRequestId.length > 0 ? n.callRequestId[0] : null,
-            timestamp: n.timestamp,
-            isRead: n.isRead,
-        }));
-    }
-    async markNotificationReadAsLocal(arg0: bigint, arg1: bigint): Promise<void> {
-        return await this.actor.markNotificationReadAsLocal(arg0, arg1);
-    }
-    async markAllNotificationsReadAsLocal(arg0: bigint): Promise<void> {
-        return await this.actor.markAllNotificationsReadAsLocal(arg0);
-    }
 }
-async function from_candid_ExternalBlob_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ExternalBlob): Promise<ExternalBlob> {
+function from_candid_CallRequestWithStatus_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallRequestWithStatus): CallRequestWithStatus {
+    return from_candid_record_n12(_uploadFile, _downloadFile, value);
+}
+function from_candid_CallStatus_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallStatus): CallStatus {
+    return from_candid_variant_n14(_uploadFile, _downloadFile, value);
+}
+async function from_candid_ExternalBlob_n23(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ExternalBlob): Promise<ExternalBlob> {
     return await _downloadFile(value);
 }
-async function from_candid_UserProfile_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserProfile): Promise<UserProfile> {
-    return await from_candid_record_n13(_uploadFile, _downloadFile, value);
+function from_candid_LocalCallRequest_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _LocalCallRequest): LocalCallRequest {
+    return from_candid_record_n18(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n17(_uploadFile, _downloadFile, value);
+async function from_candid_LocalUser_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _LocalUser): Promise<LocalUser> {
+    return await from_candid_record_n28(_uploadFile, _downloadFile, value);
 }
-async function from_candid_User_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _User): Promise<User> {
+function from_candid_NotificationType_n36(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _NotificationType): NotificationType {
+    return from_candid_variant_n37(_uploadFile, _downloadFile, value);
+}
+function from_candid_Notification_n33(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Notification): Notification {
+    return from_candid_record_n34(_uploadFile, _downloadFile, value);
+}
+async function from_candid_UserProfile_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserProfile): Promise<UserProfile> {
     return await from_candid_record_n21(_uploadFile, _downloadFile, value);
+}
+function from_candid_UserRole_n24(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n25(_uploadFile, _downloadFile, value);
+}
+async function from_candid_User_n39(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _User): Promise<User> {
+    return await from_candid_record_n40(_uploadFile, _downloadFile, value);
 }
 function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: __CaffeineStorageRefillResult): _CaffeineStorageRefillResult {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CallRequest]): CallRequest | null {
+function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CallRequestWithStatus]): CallRequestWithStatus | null {
+    return value.length === 0 ? null : from_candid_CallRequestWithStatus_n11(_uploadFile, _downloadFile, value[0]);
+}
+async function from_candid_opt_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): Promise<UserProfile | null> {
+    return value.length === 0 ? null : await from_candid_UserProfile_n20(_uploadFile, _downloadFile, value[0]);
+}
+async function from_candid_opt_n22(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ExternalBlob]): Promise<ExternalBlob | null> {
+    return value.length === 0 ? null : await from_candid_ExternalBlob_n23(_uploadFile, _downloadFile, value[0]);
+}
+async function from_candid_opt_n26(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_LocalUser]): Promise<LocalUser | null> {
+    return value.length === 0 ? null : await from_candid_LocalUser_n27(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n29(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Time]): Time | null {
     return value.length === 0 ? null : value[0];
 }
-async function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): Promise<UserProfile | null> {
-    return value.length === 0 ? null : await from_candid_UserProfile_n12(_uploadFile, _downloadFile, value[0]);
-}
-async function from_candid_opt_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ExternalBlob]): Promise<ExternalBlob | null> {
-    return value.length === 0 ? null : await from_candid_ExternalBlob_n15(_uploadFile, _downloadFile, value[0]);
-}
-function from_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Message]): Message | null {
+function from_candid_opt_n31(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Message]): Message | null {
     return value.length === 0 ? null : value[0];
 }
-async function from_candid_opt_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_User]): Promise<User | null> {
-    return value.length === 0 ? null : await from_candid_User_n20(_uploadFile, _downloadFile, value[0]);
+function from_candid_opt_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+async function from_candid_opt_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_User]): Promise<User | null> {
+    return value.length === 0 ? null : await from_candid_User_n39(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [boolean]): boolean | null {
     return value.length === 0 ? null : value[0];
@@ -737,7 +1668,49 @@ function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Ar
 function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-async function from_candid_record_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    status: _CallStatus;
+    timestamp: _Time;
+    callee: Principal;
+    caller: Principal;
+}): {
+    id: bigint;
+    status: CallStatus;
+    timestamp: Time;
+    callee: Principal;
+    caller: Principal;
+} {
+    return {
+        id: value.id,
+        status: from_candid_CallStatus_n13(_uploadFile, _downloadFile, value.status),
+        timestamp: value.timestamp,
+        callee: value.callee,
+        caller: value.caller
+    };
+}
+function from_candid_record_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    status: _CallStatus;
+    callerUsername: string;
+    timestamp: _Time;
+    calleeUsername: string;
+}): {
+    id: bigint;
+    status: CallStatus;
+    callerUsername: string;
+    timestamp: Time;
+    calleeUsername: string;
+} {
+    return {
+        id: value.id,
+        status: from_candid_CallStatus_n13(_uploadFile, _downloadFile, value.status),
+        callerUsername: value.callerUsername,
+        timestamp: value.timestamp,
+        calleeUsername: value.calleeUsername
+    };
+}
+async function from_candid_record_n21(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     fname: string;
     name: string;
     photo: [] | [_ExternalBlob];
@@ -751,11 +1724,68 @@ async function from_candid_record_n13(_uploadFile: (file: ExternalBlob) => Promi
     return {
         fname: value.fname,
         name: value.name,
-        photo: record_opt_to_undefined(await from_candid_opt_n14(_uploadFile, _downloadFile, value.photo)),
+        photo: record_opt_to_undefined(await from_candid_opt_n22(_uploadFile, _downloadFile, value.photo)),
         telephone: value.telephone
     };
 }
-async function from_candid_record_n21(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+async function from_candid_record_n28(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    age: bigint;
+    username: string;
+    displayName: string;
+    lastNameChange: [] | [_Time];
+    passwordHash: string;
+    photo: [] | [_ExternalBlob];
+}): Promise<{
+    age: bigint;
+    username: string;
+    displayName: string;
+    lastNameChange?: Time;
+    passwordHash: string;
+    photo?: ExternalBlob;
+}> {
+    return {
+        age: value.age,
+        username: value.username,
+        displayName: value.displayName,
+        lastNameChange: record_opt_to_undefined(from_candid_opt_n29(_uploadFile, _downloadFile, value.lastNameChange)),
+        passwordHash: value.passwordHash,
+        photo: record_opt_to_undefined(await from_candid_opt_n22(_uploadFile, _downloadFile, value.photo))
+    };
+}
+function from_candid_record_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    postText: [] | [string];
+    callRequestId: [] | [bigint];
+    actorName: string;
+    notifType: _NotificationType;
+    isRead: boolean;
+    timestamp: _Time;
+    recipientUsername: string;
+    postId: [] | [bigint];
+}): {
+    id: bigint;
+    postText?: string;
+    callRequestId?: bigint;
+    actorName: string;
+    notifType: NotificationType;
+    isRead: boolean;
+    timestamp: Time;
+    recipientUsername: string;
+    postId?: bigint;
+} {
+    return {
+        id: value.id,
+        postText: record_opt_to_undefined(from_candid_opt_n35(_uploadFile, _downloadFile, value.postText)),
+        callRequestId: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.callRequestId)),
+        actorName: value.actorName,
+        notifType: from_candid_NotificationType_n36(_uploadFile, _downloadFile, value.notifType),
+        isRead: value.isRead,
+        timestamp: value.timestamp,
+        recipientUsername: value.recipientUsername,
+        postId: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.postId))
+    };
+}
+async function from_candid_record_n40(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     fname: string;
     principal: Principal;
     name: string;
@@ -774,8 +1804,8 @@ async function from_candid_record_n21(_uploadFile: (file: ExternalBlob) => Promi
         fname: value.fname,
         principal: value.principal,
         name: value.name,
-        role: from_candid_UserRole_n16(_uploadFile, _downloadFile, value.role),
-        photo: record_opt_to_undefined(await from_candid_opt_n14(_uploadFile, _downloadFile, value.photo)),
+        role: from_candid_UserRole_n24(_uploadFile, _downloadFile, value.role),
+        photo: record_opt_to_undefined(await from_candid_opt_n22(_uploadFile, _downloadFile, value.photo)),
         telephone: value.telephone
     };
 }
@@ -791,7 +1821,18 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         topped_up_amount: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.topped_up_amount))
     };
 }
-function from_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    pending: null;
+} | {
+    denied: null;
+} | {
+    ended: null;
+} | {
+    accepted: null;
+}): CallStatus {
+    return "pending" in value ? CallStatus.pending : "denied" in value ? CallStatus.denied : "ended" in value ? CallStatus.ended : "accepted" in value ? CallStatus.accepted : value;
+}
+function from_candid_variant_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;
@@ -800,14 +1841,35 @@ function from_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): UserRole {
     return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
 }
-async function from_candid_vec_n22(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_User>): Promise<Array<User>> {
-    return await Promise.all(value.map(async (x)=>await from_candid_User_n20(_uploadFile, _downloadFile, x)));
+function from_candid_variant_n37(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    like: null;
+} | {
+    comment: null;
+} | {
+    callRequest: null;
+}): NotificationType {
+    return "like" in value ? NotificationType.like : "comment" in value ? NotificationType.comment : "callRequest" in value ? NotificationType.callRequest : value;
 }
-async function to_candid_ExternalBlob_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ExternalBlob): Promise<_ExternalBlob> {
+function from_candid_vec_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_CallRequestWithStatus>): Array<CallRequestWithStatus> {
+    return value.map((x)=>from_candid_CallRequestWithStatus_n11(_uploadFile, _downloadFile, x));
+}
+function from_candid_vec_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_LocalCallRequest>): Array<LocalCallRequest> {
+    return value.map((x)=>from_candid_LocalCallRequest_n17(_uploadFile, _downloadFile, x));
+}
+async function from_candid_vec_n30(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_LocalUser>): Promise<Array<LocalUser>> {
+    return await Promise.all(value.map(async (x)=>await from_candid_LocalUser_n27(_uploadFile, _downloadFile, x)));
+}
+function from_candid_vec_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Notification>): Array<Notification> {
+    return value.map((x)=>from_candid_Notification_n33(_uploadFile, _downloadFile, x));
+}
+async function from_candid_vec_n41(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_User>): Promise<Array<User>> {
+    return await Promise.all(value.map(async (x)=>await from_candid_User_n39(_uploadFile, _downloadFile, x)));
+}
+async function to_candid_ExternalBlob_n43(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ExternalBlob): Promise<_ExternalBlob> {
     return await _uploadFile(value);
 }
-async function to_candid_UserProfile_n23(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserProfile): Promise<_UserProfile> {
-    return await to_candid_record_n24(_uploadFile, _downloadFile, value);
+async function to_candid_UserProfile_n44(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserProfile): Promise<_UserProfile> {
+    return await to_candid_record_n45(_uploadFile, _downloadFile, value);
 }
 function to_candid_UserRole_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n9(_uploadFile, _downloadFile, value);
@@ -818,7 +1880,19 @@ function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: Exte
 function to_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation | null): [] | [__CaffeineStorageRefillInformation] {
     return value === null ? candid_none() : candid_some(to_candid__CaffeineStorageRefillInformation_n2(_uploadFile, _downloadFile, value));
 }
-async function to_candid_record_n24(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+async function to_candid_opt_n42(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: ExternalBlob | null): Promise<[] | [_ExternalBlob]> {
+    return value === null ? candid_none() : candid_some(await to_candid_ExternalBlob_n43(_uploadFile, _downloadFile, value));
+}
+function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    proposed_top_up_amount?: bigint;
+}): {
+    proposed_top_up_amount: [] | [bigint];
+} {
+    return {
+        proposed_top_up_amount: value.proposed_top_up_amount ? candid_some(value.proposed_top_up_amount) : candid_none()
+    };
+}
+async function to_candid_record_n45(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     fname: string;
     name: string;
     photo?: ExternalBlob;
@@ -832,17 +1906,8 @@ async function to_candid_record_n24(_uploadFile: (file: ExternalBlob) => Promise
     return {
         fname: value.fname,
         name: value.name,
-        photo: value.photo ? candid_some(await to_candid_ExternalBlob_n25(_uploadFile, _downloadFile, value.photo)) : candid_none(),
+        photo: value.photo ? candid_some(await to_candid_ExternalBlob_n43(_uploadFile, _downloadFile, value.photo)) : candid_none(),
         telephone: value.telephone
-    };
-}
-function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    proposed_top_up_amount?: bigint;
-}): {
-    proposed_top_up_amount: [] | [bigint];
-} {
-    return {
-        proposed_top_up_amount: value.proposed_top_up_amount ? candid_some(value.proposed_top_up_amount) : candid_none()
     };
 }
 function to_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {

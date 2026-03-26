@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Bell,
-  Mail,
+  Inbox,
   MessageCircle,
   Newspaper,
   Phone,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type {
-  AppNotification,
+  Notification as AppNotification,
   backendInterface as ExtendedBackend,
 } from "../backend.d";
 import { useActor } from "../hooks/useActor";
@@ -187,7 +187,7 @@ export function BottomNav() {
         <span className={labelClass}>Calls</span>
       </button>
 
-      {/* Messages */}
+      {/* Inbox (Messages) */}
       <button
         type="button"
         className={`${btnClass("/messages")} relative`}
@@ -195,17 +195,19 @@ export function BottomNav() {
         data-ocid="nav.messages_button"
       >
         <div className="relative">
-          <Mail className="h-[20px] w-[20px]" />
+          <Inbox className="h-[20px] w-[20px]" />
           {unreadCount > 0 && (
             <Badge
-              className="absolute -top-2 -right-2 h-4 w-4 min-w-0 p-0 flex items-center justify-center text-[10px] bg-red-500 text-white border-0"
+              className={`absolute -top-2 -right-2 h-4 w-4 min-w-0 p-0 flex items-center justify-center text-[10px] bg-red-500 text-white border-0 ${
+                unreadCount > 0 ? "animate-pulse" : ""
+              }`}
               data-ocid="nav.messages_badge"
             >
               {unreadCount > 9 ? "9+" : unreadCount}
             </Badge>
           )}
         </div>
-        <span className={labelClass}>Msgs</span>
+        <span className={labelClass}>Inbox</span>
       </button>
 
       {/* Notifications Bell */}
@@ -236,38 +238,40 @@ export function BottomNav() {
           className="w-80 p-0 mb-2"
           data-ocid="nav.dropdown_menu"
         >
-          <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-sm">Notifications</span>
             {unreadNotifCount > 0 && (
               <button
                 type="button"
                 onClick={handleMarkAll}
                 className="text-xs text-primary hover:underline"
-                data-ocid="nav.mark_all_button"
+                data-ocid="nav.secondary_button"
               >
-                Mark all as read
+                Mark all read
               </button>
             )}
           </div>
-          <ScrollArea className="max-h-80">
+          <ScrollArea className="max-h-72">
             {notifications.length === 0 ? (
               <div
-                className="px-4 py-6 text-center text-sm text-muted-foreground"
+                className="py-8 text-center text-sm text-muted-foreground"
                 data-ocid="nav.empty_state"
               >
-                No notifications yet
+                No notifications
               </div>
             ) : (
-              notifications.map((notif, idx) => (
+              notifications.slice(0, 20).map((notif, idx) => (
                 <DropdownMenuItem
                   key={notif.id.toString()}
-                  className={`flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 ${
+                  onClick={() => handleClickNotif(notif)}
+                  className={`flex flex-col items-start px-4 py-3 cursor-pointer gap-0.5 ${
                     !notif.isRead ? "bg-primary/5" : ""
                   }`}
-                  onClick={() => handleClickNotif(notif)}
                   data-ocid={`nav.item.${idx + 1}`}
                 >
-                  <span className="leading-snug">{notifLabel(notif)}</span>
+                  <span className="text-sm font-medium leading-snug">
+                    {notifLabel(notif)}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {relativeTime(notif.timestamp)}
                   </span>
@@ -281,11 +285,25 @@ export function BottomNav() {
       {/* My Profile */}
       <button
         type="button"
-        className={btnClass("/profile")}
+        className={`${btnClass("/profile")} relative`}
         onClick={() => navigate({ to: "/profile" })}
         data-ocid="nav.profile_link"
       >
-        <UserCircle className="h-[20px] w-[20px]" />
+        <div
+          className="rounded-full p-0.5"
+          style={{
+            background: isActive("/profile")
+              ? "linear-gradient(135deg, #7C3AED, #22C7B7)"
+              : "transparent",
+          }}
+        >
+          <UserCircle
+            className="h-[20px] w-[20px]"
+            style={{
+              color: isActive("/profile") ? "white" : undefined,
+            }}
+          />
+        </div>
         <span className={labelClass}>Profile</span>
       </button>
     </nav>

@@ -1,18 +1,22 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Switch } from "@/components/ui/switch";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronRight,
   Headphones,
   LogOut,
-  MessageCircle,
-  Newspaper,
   Pencil,
   Save,
-  UserCircle,
-  Users,
+  Settings,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,12 +34,23 @@ export default function MyProfilePage() {
   const { actor } = useActor();
   const { localSession, logoutLocal, isLocalLoggedIn } = useLocalAuth();
   const navigate = useNavigate();
+  const extActor = actor as unknown as ExtendedBackend | null;
 
   const [profile, setProfile] = useState<LocalUser | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editAge, setEditAge] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Followers / Following
+  const [followers, setFollowers] = useState<string[]>([]);
+  const [following, setFollowing] = useState<string[]>([]);
+
+  // Settings dialog
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hideFollowers, setHideFollowers] = useState(false);
+  const [hideFollowing, setHideFollowing] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!isLocalLoggedIn) {
@@ -45,14 +60,28 @@ export default function MyProfilePage() {
 
   useEffect(() => {
     if (!isLocalLoggedIn || !actor || !localSession) return;
-    const extActor = actor as unknown as ExtendedBackend;
     extActor
-      .getLocalUserProfile(localSession.token)
+      ?.getLocalUserProfile(localSession.token)
       .then((p) => {
         if (p) setProfile(p);
       })
       .catch(() => {});
-  }, [isLocalLoggedIn, actor, localSession]);
+  }, [isLocalLoggedIn, actor, localSession, extActor]);
+
+  // Load followers/following
+  useEffect(() => {
+    if (!isLocalLoggedIn || !extActor || !localSession) return;
+    const username = localSession.username;
+    Promise.all([
+      extActor.getFollowers(localSession.token, username),
+      extActor.getFollowing(localSession.token, username),
+    ])
+      .then(([f1, f2]) => {
+        setFollowers(f1);
+        setFollowing(f2);
+      })
+      .catch(() => {});
+  }, [isLocalLoggedIn, extActor, localSession]);
 
   const handleLogout = async () => {
     try {
@@ -72,10 +101,24 @@ export default function MyProfilePage() {
   const cancelEdit = () => setIsEditing(false);
 
   const saveEdit = async () => {
+    if (!extActor || !localSession) return;
     setIsSaving(true);
     try {
-      // No updateLocalProfile in backend — save locally only
-      toast.success("Profile update saved!");
+      const nameChanged =
+        editName !== (profile?.displayName ?? localSession?.displayName ?? "");
+      if (nameChanged) {
+        const result = await extActor.updateLocalUserDisplayName(
+          localSession.token,
+          editName,
+        );
+        if (result.startsWith("locked:")) {
+          const days = result.split(":")[1];
+          toast.error(`You can change your name again in ${days} days.`);
+          setIsSaving(false);
+          return;
+        }
+      }
+      toast.success("Profile updated!");
       if (profile) {
         setProfile({
           ...profile,
@@ -88,6 +131,36 @@ export default function MyProfilePage() {
       toast.error("Failed to save profile");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const openSettings = async () => {
+    setSettingsOpen(true);
+    if (!extActor || !localSession) return;
+    try {
+      const settings = await extActor.getProfileSettings(localSession.token);
+      setHideFollowers(settings.hideFollowers);
+      setHideFollowing(settings.hideFollowing);
+    } catch {
+      // ignore
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!extActor || !localSession) return;
+    setSavingSettings(true);
+    try {
+      await extActor.updateProfileSettings(
+        localSession.token,
+        hideFollowers,
+        hideFollowing,
+      );
+      toast.success("Settings saved");
+      setSettingsOpen(false);
+    } catch {
+      toast.error("Failed to save settings");
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -135,7 +208,7 @@ export default function MyProfilePage() {
             {/* Banner */}
             <div className="h-24 bg-gradient-to-r from-purple-500 via-indigo-500 to-teal-400" />
 
-            {/* Avatar + Edit button */}
+            {/* Avatar + Edit + Settings */}
             <div className="px-6 pb-6">
               <div className="flex items-end justify-between -mt-12 mb-4">
                 <Avatar className="w-20 h-20 border-4 border-white shadow-md">
@@ -143,40 +216,52 @@ export default function MyProfilePage() {
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                {!isEditing ? (
+                <div className="flex items-center gap-2">
+                  {/* Settings gear */}
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    onClick={startEdit}
-                    className="rounded-full gap-2"
-                    data-ocid="profile.edit_button"
+                    onClick={openSettings}
+                    className="rounded-full w-9 h-9 p-0 text-muted-foreground hover:text-foreground"
+                    data-ocid="profile.open_modal_button"
                   >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit Profile
+                    <Settings className="h-4 w-4" />
                   </Button>
-                ) : (
-                  <div className="flex gap-2">
+                  {!isEditing ? (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={cancelEdit}
-                      className="rounded-full"
-                      data-ocid="profile.cancel_button"
+                      onClick={startEdit}
+                      className="rounded-full gap-2"
+                      data-ocid="profile.edit_button"
                     >
-                      <X className="h-4 w-4" />
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit Profile
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={saveEdit}
-                      disabled={isSaving}
-                      className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-400 text-white border-0"
-                      data-ocid="profile.save_button"
-                    >
-                      <Save className="h-3.5 w-3.5" />
-                      Save
-                    </Button>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={cancelEdit}
+                        className="rounded-full"
+                        data-ocid="profile.cancel_button"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={saveEdit}
+                        disabled={isSaving}
+                        className="rounded-full gap-2 bg-gradient-to-r from-purple-500 to-teal-400 text-white border-0"
+                        data-ocid="profile.save_button"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {isEditing ? (
@@ -190,6 +275,9 @@ export default function MyProfilePage() {
                       className="rounded-lg"
                       data-ocid="profile.input"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Name can only be changed once every 15 days.
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="edit-age">Age</Label>
@@ -199,7 +287,6 @@ export default function MyProfilePage() {
                       value={editAge}
                       onChange={(e) => setEditAge(e.target.value)}
                       className="rounded-lg"
-                      data-ocid="profile.input"
                     />
                   </div>
                 </div>
@@ -216,6 +303,23 @@ export default function MyProfilePage() {
                   )}
                 </div>
               )}
+
+              {/* Followers / Following */}
+              <div className="flex items-center gap-4 mt-4">
+                <div className="text-center">
+                  <p className="font-bold text-lg text-foreground">
+                    {followers.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Followers</p>
+                </div>
+                <div className="w-px h-8 bg-border" />
+                <div className="text-center">
+                  <p className="font-bold text-lg text-foreground">
+                    {following.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Following</p>
+                </div>
+              </div>
 
               {/* Stats */}
               <div className="mt-6 pt-5 border-t border-border">
@@ -265,6 +369,60 @@ export default function MyProfilePage() {
         </a>
       </footer>
       <BottomNav />
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent data-ocid="profile.dialog">
+          <DialogHeader>
+            <DialogTitle>Profile Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-sm">Hide follower count</p>
+                <p className="text-xs text-muted-foreground">
+                  Others can&apos;t see how many followers you have
+                </p>
+              </div>
+              <Switch
+                checked={hideFollowers}
+                onCheckedChange={setHideFollowers}
+                data-ocid="profile.switch"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-sm">Hide following count</p>
+                <p className="text-xs text-muted-foreground">
+                  Others can&apos;t see who you follow
+                </p>
+              </div>
+              <Switch
+                checked={hideFollowing}
+                onCheckedChange={setHideFollowing}
+                data-ocid="profile.switch"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setSettingsOpen(false)}
+              data-ocid="profile.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={saveSettings}
+              disabled={savingSettings}
+              className="bg-gradient-to-r from-purple-500 to-teal-400 text-white border-0"
+              data-ocid="profile.save_button"
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

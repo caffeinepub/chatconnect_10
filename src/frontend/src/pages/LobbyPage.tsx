@@ -9,16 +9,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   LogOut,
-  MessageCircle,
   Mic,
   MicOff,
-  Newspaper,
   Radio,
   Send,
-  UserCircle,
   Users,
   Volume2,
   VolumeX,
@@ -67,6 +64,9 @@ export default function LobbyPage() {
   const queryClient = useQueryClient();
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // "On Mic" / "Online" tab
+  const [voiceTab, setVoiceTab] = useState<"mic" | "online">("mic");
 
   const { data: myProfile, isLoading: profileLoading } =
     useGetCallerUserProfile();
@@ -201,6 +201,11 @@ export default function LobbyPage() {
 
   const isSending = isLocalLoggedIn ? isSendingLocal : sendMessageII.isPending;
 
+  // Voice tab data
+  const onMicUsers = voiceParticipants.filter((p) => p.isMicActive);
+  const onlineVoiceUsers = voiceParticipants;
+  const tabUsers = voiceTab === "mic" ? onMicUsers : onlineVoiceUsers;
+
   return (
     <TooltipProvider>
       <GlobalCallWatcher />
@@ -233,6 +238,78 @@ export default function LobbyPage() {
             </Button>
           </nav>
         </header>
+
+        {/* Voice Status Strip — only on Lobby page, two tabs */}
+        <div className="bg-white border-b border-border flex-shrink-0">
+          {/* Tab bar */}
+          <div className="flex items-center gap-0 border-b border-border/50">
+            <button
+              type="button"
+              onClick={() => setVoiceTab("mic")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                voiceTab === "mic"
+                  ? "border-green-500 text-green-700"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-ocid="lobby.tab"
+            >
+              <Mic className="h-3 w-3" />
+              On Mic
+              {onMicUsers.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">
+                  {onMicUsers.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceTab("online")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                voiceTab === "online"
+                  ? "border-violet-500 text-violet-700"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-ocid="lobby.tab"
+            >
+              <Users className="h-3 w-3" />
+              In Voice
+              {onlineVoiceUsers.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold">
+                  {onlineVoiceUsers.length}
+                </span>
+              )}
+            </button>
+          </div>
+          {/* Pill list */}
+          <div
+            className="flex items-center gap-2 px-4 py-2 overflow-x-auto"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {tabUsers.length === 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {voiceTab === "mic"
+                  ? "No one on mic right now"
+                  : "No one in voice channel"}
+              </span>
+            ) : (
+              tabUsers.map((p) => (
+                <span
+                  key={p.username}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
+                    voiceTab === "mic"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-violet-100 text-violet-700"
+                  }`}
+                >
+                  {voiceTab === "mic" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  )}
+                  {p.displayName}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
 
         <div className="flex flex-1 overflow-hidden">
           <aside className="w-64 border-r border-border bg-white flex-shrink-0 hidden md:flex flex-col">
@@ -326,25 +403,6 @@ export default function LobbyPage() {
           </aside>
 
           <main className="flex-1 flex flex-col overflow-hidden">
-            {/* On Mic strip */}
-            {voiceParticipants.some((p) => p.isMicActive) && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border-b border-green-100 overflow-x-auto flex-shrink-0">
-                <span className="text-xs font-semibold text-green-700 flex-shrink-0">
-                  🎙 On mic:
-                </span>
-                {voiceParticipants
-                  .filter((p) => p.isMicActive)
-                  .map((p) => (
-                    <span
-                      key={p.username}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium flex-shrink-0"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      {p.displayName}
-                    </span>
-                  ))}
-              </div>
-            )}
             <ScrollArea className="flex-1 p-6">
               <AnimatePresence initial={false}>
                 {sortedMessages.length === 0 ? (
@@ -414,7 +472,35 @@ export default function LobbyPage() {
               <div ref={messagesEndRef} />
             </ScrollArea>
 
-            <div className="p-4 pb-6 border-t border-border bg-white flex-shrink-0">
+            {/* Bottom controls + input, sits ABOVE the bottom nav bar */}
+            <div
+              className="p-4 border-t border-border bg-white flex-shrink-0"
+              style={{
+                paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
+              {/* Message Input */}
+              <form
+                onSubmit={handleSend}
+                className="flex gap-3 max-w-3xl mx-auto mb-2"
+              >
+                <Input
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  placeholder="Say something to the lobby..."
+                  className="flex-1 rounded-full h-11 px-5"
+                  data-ocid="lobby.input"
+                />
+                <Button
+                  type="submit"
+                  disabled={!messageText.trim() || isSending}
+                  className="rounded-full w-11 h-11 p-0 btn-orange flex-shrink-0"
+                  data-ocid="lobby.submit_button"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+
               {/* Voice Controls Row */}
               <div className="flex items-center gap-2 max-w-3xl mx-auto mb-2">
                 {!isInChannel ? (
@@ -564,28 +650,6 @@ export default function LobbyPage() {
                   </span>
                 )}
               </div>
-
-              {/* Message Input */}
-              <form
-                onSubmit={handleSend}
-                className="flex gap-3 max-w-3xl mx-auto"
-              >
-                <Input
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  placeholder="Say something to the lobby..."
-                  className="flex-1 rounded-full h-11 px-5"
-                  data-ocid="lobby.input"
-                />
-                <Button
-                  type="submit"
-                  disabled={!messageText.trim() || isSending}
-                  className="rounded-full w-11 h-11 p-0 btn-orange flex-shrink-0"
-                  data-ocid="lobby.submit_button"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
             </div>
           </main>
         </div>

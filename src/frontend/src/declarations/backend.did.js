@@ -19,17 +19,32 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const SessionToken = IDL.Nat;
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const CallStatus = IDL.Variant({
+  'pending' : IDL.Null,
+  'denied' : IDL.Null,
+  'ended' : IDL.Null,
+  'accepted' : IDL.Null,
+});
 export const Time = IDL.Int;
-export const CallRequest = IDL.Record({
+export const CallRequestWithStatus = IDL.Record({
   'id' : IDL.Nat,
+  'status' : CallStatus,
   'timestamp' : Time,
   'callee' : IDL.Principal,
   'caller' : IDL.Principal,
+});
+export const LocalCallRequest = IDL.Record({
+  'id' : IDL.Nat,
+  'status' : CallStatus,
+  'callerUsername' : IDL.Text,
+  'timestamp' : Time,
+  'calleeUsername' : IDL.Text,
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
 export const UserProfile = IDL.Record({
@@ -38,12 +53,78 @@ export const UserProfile = IDL.Record({
   'photo' : IDL.Opt(ExternalBlob),
   'telephone' : IDL.Text,
 });
+export const Comment = IDL.Record({
+  'id' : IDL.Nat,
+  'text' : IDL.Text,
+  'authorName' : IDL.Text,
+  'author' : IDL.Principal,
+  'timestamp' : Time,
+  'postId' : IDL.Nat,
+});
+export const ConversationSummary = IDL.Record({
+  'otherUsername' : IDL.Text,
+  'lastMessage' : IDL.Text,
+  'unreadCount' : IDL.Nat,
+  'lastTimestamp' : Time,
+  'otherDisplayName' : IDL.Text,
+});
+export const DirectMessage = IDL.Record({
+  'id' : IDL.Nat,
+  'text' : IDL.Text,
+  'senderUsername' : IDL.Text,
+  'isRead' : IDL.Bool,
+  'timestamp' : Time,
+  'recipientUsername' : IDL.Text,
+});
+export const LocalUser = IDL.Record({
+  'age' : IDL.Nat,
+  'username' : IDL.Text,
+  'displayName' : IDL.Text,
+  'lastNameChange' : IDL.Opt(Time),
+  'passwordHash' : IDL.Text,
+  'photo' : IDL.Opt(ExternalBlob),
+});
 export const Message = IDL.Record({
   'id' : IDL.Nat,
   'text' : IDL.Text,
   'authorName' : IDL.Text,
   'author' : IDL.Principal,
   'timestamp' : Time,
+});
+export const Signal = IDL.Record({
+  'id' : IDL.Nat,
+  'data' : IDL.Text,
+  'toUsername' : IDL.Text,
+  'timestamp' : Time,
+  'fromUsername' : IDL.Text,
+  'signalType' : IDL.Text,
+});
+export const NotificationType = IDL.Variant({
+  'like' : IDL.Null,
+  'comment' : IDL.Null,
+  'callRequest' : IDL.Null,
+});
+export const Notification = IDL.Record({
+  'id' : IDL.Nat,
+  'postText' : IDL.Opt(IDL.Text),
+  'callRequestId' : IDL.Opt(IDL.Nat),
+  'actorName' : IDL.Text,
+  'notifType' : NotificationType,
+  'isRead' : IDL.Bool,
+  'timestamp' : Time,
+  'recipientUsername' : IDL.Text,
+  'postId' : IDL.Opt(IDL.Nat),
+});
+export const Post = IDL.Record({
+  'id' : IDL.Nat,
+  'text' : IDL.Text,
+  'authorName' : IDL.Text,
+  'author' : IDL.Principal,
+  'timestamp' : Time,
+});
+export const ProfileSettings = IDL.Record({
+  'hideFollowers' : IDL.Bool,
+  'hideFollowing' : IDL.Bool,
 });
 export const User = IDL.Record({
   'fname' : IDL.Text,
@@ -53,78 +134,10 @@ export const User = IDL.Record({
   'photo' : IDL.Opt(ExternalBlob),
   'telephone' : IDL.Text,
 });
-export const LocalUser = IDL.Record({
-  'username': IDL.Text,
-  'displayName': IDL.Text,
-  'passwordHash': IDL.Text,
-  'age': IDL.Nat,
-  'photo': IDL.Opt(ExternalBlob),
-});
-export const Post = IDL.Record({
-  'id': IDL.Nat,
-  'author': IDL.Principal,
-  'authorName': IDL.Text,
-  'text': IDL.Text,
-  'timestamp': Time,
-});
-export const Comment = IDL.Record({
-  'id': IDL.Nat,
-  'postId': IDL.Nat,
-  'author': IDL.Principal,
-  'authorName': IDL.Text,
-  'text': IDL.Text,
-  'timestamp': Time,
-});
 export const VoiceParticipant = IDL.Record({
-  'username': IDL.Text,
-  'displayName': IDL.Text,
-  'isMicActive': IDL.Bool,
-});
-export const Signal = IDL.Record({
-  'id': IDL.Nat,
-  'fromUsername': IDL.Text,
-  'toUsername': IDL.Text,
-  'signalType': IDL.Text,
-  'data': IDL.Text,
-  'timestamp': Time,
-});
-export const NotificationType = IDL.Variant({
-  'like': IDL.Null,
-  'comment': IDL.Null,
-  'callRequest': IDL.Null,
-});
-export const Notification = IDL.Record({
-  'id': IDL.Nat,
-  'recipientUsername': IDL.Text,
-  'notifType': NotificationType,
-  'actorName': IDL.Text,
-  'postId': IDL.Opt(IDL.Nat),
-  'postText': IDL.Opt(IDL.Text),
-  'callRequestId': IDL.Opt(IDL.Nat),
-  'timestamp': Time,
-  'isRead': IDL.Bool,
-});
-export const LocalCallRequest = IDL.Record({
-  'id': IDL.Nat,
-  'callerUsername': IDL.Text,
-  'calleeUsername': IDL.Text,
-  'status': IDL.Variant({ 'pending': IDL.Null, 'accepted': IDL.Null, 'ended': IDL.Null, 'denied': IDL.Null }),
-  'timestamp': Time,
-});
-export const DirectMessage = IDL.Record({
-  'id': IDL.Nat,
-  'senderUsername': IDL.Text,
-  'recipientUsername': IDL.Text,
-  'text': IDL.Text,
-  'timestamp': Time,
-  'isRead': IDL.Bool,
-});
-export const ConversationSummary = IDL.Record({
-  'otherUsername': IDL.Text,
-  'otherDisplayName': IDL.Text,
-  'lastMessage': IDL.Text,
-  'lastTimestamp': Time,
-  'unreadCount': IDL.Nat,
+  'username' : IDL.Text,
+  'displayName' : IDL.Text,
+  'isMicActive' : IDL.Bool,
 });
 
 export const idlService = IDL.Service({
@@ -155,15 +168,105 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'acceptCallRequest' : IDL.Func([IDL.Nat], [], []),
+  'acceptCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'addComment' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
+  'addCommentAsLocal' : IDL.Func(
+      [SessionToken, IDL.Nat, IDL.Text],
+      [IDL.Nat],
+      [],
+    ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'blockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'createPost' : IDL.Func([IDL.Text], [IDL.Nat], []),
+  'createPostAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
   'createUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'deleteCallRequest' : IDL.Func([IDL.Nat], [], []),
+  'deleteComment' : IDL.Func([IDL.Nat], [], []),
+  'deleteCommentAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'deletePost' : IDL.Func([IDL.Nat], [], []),
+  'deletePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
   'deleteUser' : IDL.Func([IDL.Principal], [], []),
-  'getCallRequest' : IDL.Func([IDL.Nat], [IDL.Opt(CallRequest)], ['query']),
-  'getCallRequests' : IDL.Func([], [IDL.Vec(CallRequest)], ['query']),
+  'denyCallRequest' : IDL.Func([IDL.Nat], [], []),
+  'denyCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'endCall' : IDL.Func([IDL.Nat], [], []),
+  'endCallAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'followUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'getBlockedUsers' : IDL.Func([SessionToken], [IDL.Vec(IDL.Text)], ['query']),
+  'getCallRequest' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Opt(CallRequestWithStatus)],
+      ['query'],
+    ),
+  'getCallRequests' : IDL.Func([], [IDL.Vec(CallRequestWithStatus)], ['query']),
+  'getCallRequestsAsLocal' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(LocalCallRequest)],
+      ['query'],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
+  'getCommentsForPostAsLocal' : IDL.Func(
+      [SessionToken, IDL.Nat],
+      [IDL.Vec(Comment)],
+      ['query'],
+    ),
+  'getConversations' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(ConversationSummary)],
+      ['query'],
+    ),
+  'getDirectMessages' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Vec(DirectMessage)],
+      ['query'],
+    ),
+  'getFollowers' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Vec(IDL.Text)],
+      ['query'],
+    ),
+  'getFollowing' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Vec(IDL.Text)],
+      ['query'],
+    ),
+  'getLocalUserProfile' : IDL.Func(
+      [SessionToken],
+      [IDL.Opt(LocalUser)],
+      ['query'],
+    ),
+  'getLocalUsers' : IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
   'getMessage' : IDL.Func([IDL.Nat], [IDL.Opt(Message)], ['query']),
   'getMessages' : IDL.Func([], [IDL.Vec(Message)], ['query']),
+  'getMessagesAsLocal' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(Message)],
+      ['query'],
+    ),
+  'getMySignals' : IDL.Func([SessionToken], [IDL.Vec(Signal)], []),
+  'getNotificationsAsLocal' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(Notification)],
+      ['query'],
+    ),
+  'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
+  'getPostLikesAsLocal' : IDL.Func(
+      [SessionToken, IDL.Nat],
+      [IDL.Vec(IDL.Text)],
+      ['query'],
+    ),
+  'getPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+  'getPostsAsLocal' : IDL.Func([SessionToken], [IDL.Vec(Post)], ['query']),
+  'getProfileSettings' : IDL.Func([SessionToken], [ProfileSettings], ['query']),
+  'getPublicProfileSettings' : IDL.Func(
+      [IDL.Text],
+      [ProfileSettings],
+      ['query'],
+    ),
+  'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
   'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -172,46 +275,68 @@ export const idlService = IDL.Service({
     ),
   'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
   'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
+  'getVoiceParticipants' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(VoiceParticipant)],
+      ['query'],
+    ),
+  'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+  'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+  'joinVoiceChannel' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(VoiceParticipant)],
+      [],
+    ),
+  'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
+  'likePost' : IDL.Func([IDL.Nat], [], []),
+  'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [SessionToken], []),
+  'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
+  'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
+  'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'registerLocalAccount' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)],
+      [],
+      [],
+    ),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
+  'sendCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
+  'sendDirectMessage' : IDL.Func(
+      [SessionToken, IDL.Text, IDL.Text],
+      [IDL.Nat],
+      [],
+    ),
+  'sendMessage' : IDL.Func([IDL.Text], [IDL.Nat], []),
+  'sendMessageAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
+  'sendSignal' : IDL.Func([SessionToken, IDL.Text, IDL.Text, IDL.Text], [], []),
+  'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+  'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'unlikePost' : IDL.Func([IDL.Nat], [], []),
+  'unlikePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'updateLocalUserDisplayName' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Text],
+      [],
+    ),
+  'updateLocalUserPhoto' : IDL.Func([SessionToken, ExternalBlob], [], []),
+  'updateProfileSettings' : IDL.Func(
+      [SessionToken, IDL.Bool, IDL.Bool],
+      [],
+      [],
+    ),
+  'updateUser' : IDL.Func([ExternalBlob], [], []),
+  'updateUserWithoutPhoto' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'validateSessionToken' : IDL.Func(
+      [SessionToken],
+      [IDL.Opt(IDL.Text)],
+      ['query'],
+    ),
   'verifyUser' : IDL.Func([], [], []),
-  'registerLocalAccount': IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)], [], []),
-  'loginLocalAccount': IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
-  'logoutLocalAccount': IDL.Func([IDL.Nat], [], []),
-  'validateSessionToken': IDL.Func([IDL.Nat], [IDL.Opt(IDL.Text)], ['query']),
-  'getLocalUserProfile': IDL.Func([IDL.Nat], [IDL.Opt(LocalUser)], ['query']),
-  'updateLocalUserPhoto': IDL.Func([IDL.Nat, ExternalBlob], [], []),
-  'getLocalUsers': IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
-  'sendMessageAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-  'getMessagesAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Message)], ['query']),
-  'sendDirectMessage': IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [IDL.Nat], []),
-  'getDirectMessages': IDL.Func([IDL.Nat, IDL.Text], [IDL.Vec(DirectMessage)], ['query']),
-  'getConversations': IDL.Func([IDL.Nat], [IDL.Vec(ConversationSummary)], ['query']),
-  'markDirectMessagesRead': IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'getUnreadDMCount': IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
-  'createPostAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-  'getPostsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
-  'deletePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'likePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'unlikePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'getPostLikesAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
-  'addCommentAsLocal': IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [IDL.Nat], []),
-  'getCommentsForPostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [IDL.Vec(Comment)], ['query']),
-  'deleteCommentAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'joinVoiceChannel': IDL.Func([IDL.Nat], [IDL.Vec(VoiceParticipant)], []),
-  'leaveVoiceChannel': IDL.Func([IDL.Nat], [], []),
-  'getVoiceParticipants': IDL.Func([IDL.Nat], [IDL.Vec(VoiceParticipant)], ['query']),
-  'sendSignal': IDL.Func([IDL.Nat, IDL.Text, IDL.Text, IDL.Text], [], []),
-  'getMySignals': IDL.Func([IDL.Nat], [IDL.Vec(Signal)], []),
-  'setMicActive': IDL.Func([IDL.Nat, IDL.Bool], [], []),
-  'sendCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-  'getCallRequestsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(LocalCallRequest)], ['query']),
-  'acceptCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'denyCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'endCallAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'getNotificationsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Notification)], ['query']),
-  'markNotificationReadAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-  'markAllNotificationsReadAsLocal': IDL.Func([IDL.Nat], [], []),
 });
 
 export const idlInitArgs = [];
@@ -228,17 +353,32 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
+  const SessionToken = IDL.Nat;
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const CallStatus = IDL.Variant({
+    'pending' : IDL.Null,
+    'denied' : IDL.Null,
+    'ended' : IDL.Null,
+    'accepted' : IDL.Null,
+  });
   const Time = IDL.Int;
-  const CallRequest = IDL.Record({
+  const CallRequestWithStatus = IDL.Record({
     'id' : IDL.Nat,
+    'status' : CallStatus,
     'timestamp' : Time,
     'callee' : IDL.Principal,
     'caller' : IDL.Principal,
+  });
+  const LocalCallRequest = IDL.Record({
+    'id' : IDL.Nat,
+    'status' : CallStatus,
+    'callerUsername' : IDL.Text,
+    'timestamp' : Time,
+    'calleeUsername' : IDL.Text,
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
   const UserProfile = IDL.Record({
@@ -247,12 +387,78 @@ export const idlFactory = ({ IDL }) => {
     'photo' : IDL.Opt(ExternalBlob),
     'telephone' : IDL.Text,
   });
+  const Comment = IDL.Record({
+    'id' : IDL.Nat,
+    'text' : IDL.Text,
+    'authorName' : IDL.Text,
+    'author' : IDL.Principal,
+    'timestamp' : Time,
+    'postId' : IDL.Nat,
+  });
+  const ConversationSummary = IDL.Record({
+    'otherUsername' : IDL.Text,
+    'lastMessage' : IDL.Text,
+    'unreadCount' : IDL.Nat,
+    'lastTimestamp' : Time,
+    'otherDisplayName' : IDL.Text,
+  });
+  const DirectMessage = IDL.Record({
+    'id' : IDL.Nat,
+    'text' : IDL.Text,
+    'senderUsername' : IDL.Text,
+    'isRead' : IDL.Bool,
+    'timestamp' : Time,
+    'recipientUsername' : IDL.Text,
+  });
+  const LocalUser = IDL.Record({
+    'age' : IDL.Nat,
+    'username' : IDL.Text,
+    'displayName' : IDL.Text,
+    'lastNameChange' : IDL.Opt(Time),
+    'passwordHash' : IDL.Text,
+    'photo' : IDL.Opt(ExternalBlob),
+  });
   const Message = IDL.Record({
     'id' : IDL.Nat,
     'text' : IDL.Text,
     'authorName' : IDL.Text,
     'author' : IDL.Principal,
-    'timestamp' : IDL.Int,
+    'timestamp' : Time,
+  });
+  const Signal = IDL.Record({
+    'id' : IDL.Nat,
+    'data' : IDL.Text,
+    'toUsername' : IDL.Text,
+    'timestamp' : Time,
+    'fromUsername' : IDL.Text,
+    'signalType' : IDL.Text,
+  });
+  const NotificationType = IDL.Variant({
+    'like' : IDL.Null,
+    'comment' : IDL.Null,
+    'callRequest' : IDL.Null,
+  });
+  const Notification = IDL.Record({
+    'id' : IDL.Nat,
+    'postText' : IDL.Opt(IDL.Text),
+    'callRequestId' : IDL.Opt(IDL.Nat),
+    'actorName' : IDL.Text,
+    'notifType' : NotificationType,
+    'isRead' : IDL.Bool,
+    'timestamp' : Time,
+    'recipientUsername' : IDL.Text,
+    'postId' : IDL.Opt(IDL.Nat),
+  });
+  const Post = IDL.Record({
+    'id' : IDL.Nat,
+    'text' : IDL.Text,
+    'authorName' : IDL.Text,
+    'author' : IDL.Principal,
+    'timestamp' : Time,
+  });
+  const ProfileSettings = IDL.Record({
+    'hideFollowers' : IDL.Bool,
+    'hideFollowing' : IDL.Bool,
   });
   const User = IDL.Record({
     'fname' : IDL.Text,
@@ -262,78 +468,10 @@ export const idlFactory = ({ IDL }) => {
     'photo' : IDL.Opt(ExternalBlob),
     'telephone' : IDL.Text,
   });
-  const LocalUser = IDL.Record({
-    'username': IDL.Text,
-    'displayName': IDL.Text,
-    'passwordHash': IDL.Text,
-    'age': IDL.Nat,
-    'photo': IDL.Opt(ExternalBlob),
-  });
-  const Post = IDL.Record({
-    'id': IDL.Nat,
-    'author': IDL.Principal,
-    'authorName': IDL.Text,
-    'text': IDL.Text,
-    'timestamp': Time,
-  });
-  const Comment = IDL.Record({
-    'id': IDL.Nat,
-    'postId': IDL.Nat,
-    'author': IDL.Principal,
-    'authorName': IDL.Text,
-    'text': IDL.Text,
-    'timestamp': Time,
-  });
   const VoiceParticipant = IDL.Record({
-    'username': IDL.Text,
-    'displayName': IDL.Text,
-    'isMicActive': IDL.Bool,
-  });
-  const Signal = IDL.Record({
-    'id': IDL.Nat,
-    'fromUsername': IDL.Text,
-    'toUsername': IDL.Text,
-    'signalType': IDL.Text,
-    'data': IDL.Text,
-    'timestamp': Time,
-  });
-  const NotificationType = IDL.Variant({
-    'like': IDL.Null,
-    'comment': IDL.Null,
-    'callRequest': IDL.Null,
-  });
-  const Notification = IDL.Record({
-    'id': IDL.Nat,
-    'recipientUsername': IDL.Text,
-    'notifType': NotificationType,
-    'actorName': IDL.Text,
-    'postId': IDL.Opt(IDL.Nat),
-    'postText': IDL.Opt(IDL.Text),
-    'callRequestId': IDL.Opt(IDL.Nat),
-    'timestamp': Time,
-    'isRead': IDL.Bool,
-  });
-  const LocalCallRequest = IDL.Record({
-    'id': IDL.Nat,
-    'callerUsername': IDL.Text,
-    'calleeUsername': IDL.Text,
-    'status': IDL.Variant({ 'pending': IDL.Null, 'accepted': IDL.Null, 'ended': IDL.Null, 'denied': IDL.Null }),
-    'timestamp': Time,
-  });
-  const DirectMessage = IDL.Record({
-    'id': IDL.Nat,
-    'senderUsername': IDL.Text,
-    'recipientUsername': IDL.Text,
-    'text': IDL.Text,
-    'timestamp': Time,
-    'isRead': IDL.Bool,
-  });
-  const ConversationSummary = IDL.Record({
-    'otherUsername': IDL.Text,
-    'otherDisplayName': IDL.Text,
-    'lastMessage': IDL.Text,
-    'lastTimestamp': Time,
-    'unreadCount': IDL.Nat,
+    'username' : IDL.Text,
+    'displayName' : IDL.Text,
+    'isMicActive' : IDL.Bool,
   });
   
   return IDL.Service({
@@ -364,15 +502,117 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'acceptCallRequest' : IDL.Func([IDL.Nat], [], []),
+    'acceptCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'addComment' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
+    'addCommentAsLocal' : IDL.Func(
+        [SessionToken, IDL.Nat, IDL.Text],
+        [IDL.Nat],
+        [],
+      ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'blockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'createPost' : IDL.Func([IDL.Text], [IDL.Nat], []),
+    'createPostAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
     'createUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'deleteCallRequest' : IDL.Func([IDL.Nat], [], []),
+    'deleteComment' : IDL.Func([IDL.Nat], [], []),
+    'deleteCommentAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'deletePost' : IDL.Func([IDL.Nat], [], []),
+    'deletePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
     'deleteUser' : IDL.Func([IDL.Principal], [], []),
-    'getCallRequest' : IDL.Func([IDL.Nat], [IDL.Opt(CallRequest)], ['query']),
-    'getCallRequests' : IDL.Func([], [IDL.Vec(CallRequest)], ['query']),
+    'denyCallRequest' : IDL.Func([IDL.Nat], [], []),
+    'denyCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'endCall' : IDL.Func([IDL.Nat], [], []),
+    'endCallAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'followUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'getBlockedUsers' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(IDL.Text)],
+        ['query'],
+      ),
+    'getCallRequest' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Opt(CallRequestWithStatus)],
+        ['query'],
+      ),
+    'getCallRequests' : IDL.Func(
+        [],
+        [IDL.Vec(CallRequestWithStatus)],
+        ['query'],
+      ),
+    'getCallRequestsAsLocal' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(LocalCallRequest)],
+        ['query'],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
+    'getCommentsForPostAsLocal' : IDL.Func(
+        [SessionToken, IDL.Nat],
+        [IDL.Vec(Comment)],
+        ['query'],
+      ),
+    'getConversations' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(ConversationSummary)],
+        ['query'],
+      ),
+    'getDirectMessages' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Vec(DirectMessage)],
+        ['query'],
+      ),
+    'getFollowers' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Vec(IDL.Text)],
+        ['query'],
+      ),
+    'getFollowing' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Vec(IDL.Text)],
+        ['query'],
+      ),
+    'getLocalUserProfile' : IDL.Func(
+        [SessionToken],
+        [IDL.Opt(LocalUser)],
+        ['query'],
+      ),
+    'getLocalUsers' : IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
     'getMessage' : IDL.Func([IDL.Nat], [IDL.Opt(Message)], ['query']),
     'getMessages' : IDL.Func([], [IDL.Vec(Message)], ['query']),
+    'getMessagesAsLocal' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(Message)],
+        ['query'],
+      ),
+    'getMySignals' : IDL.Func([SessionToken], [IDL.Vec(Signal)], []),
+    'getNotificationsAsLocal' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(Notification)],
+        ['query'],
+      ),
+    'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
+    'getPostLikesAsLocal' : IDL.Func(
+        [SessionToken, IDL.Nat],
+        [IDL.Vec(IDL.Text)],
+        ['query'],
+      ),
+    'getPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+    'getPostsAsLocal' : IDL.Func([SessionToken], [IDL.Vec(Post)], ['query']),
+    'getProfileSettings' : IDL.Func(
+        [SessionToken],
+        [ProfileSettings],
+        ['query'],
+      ),
+    'getPublicProfileSettings' : IDL.Func(
+        [IDL.Text],
+        [ProfileSettings],
+        ['query'],
+      ),
+    'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
     'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -381,46 +621,76 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
     'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
+    'getVoiceParticipants' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(VoiceParticipant)],
+        ['query'],
+      ),
+    'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+    'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+    'joinVoiceChannel' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(VoiceParticipant)],
+        [],
+      ),
+    'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
+    'likePost' : IDL.Func([IDL.Nat], [], []),
+    'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [SessionToken], []),
+    'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
+    'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
+    'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'registerLocalAccount' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)],
+        [],
+        [],
+      ),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
+    'sendCallRequestAsLocal' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Nat],
+        [],
+      ),
+    'sendDirectMessage' : IDL.Func(
+        [SessionToken, IDL.Text, IDL.Text],
+        [IDL.Nat],
+        [],
+      ),
+    'sendMessage' : IDL.Func([IDL.Text], [IDL.Nat], []),
+    'sendMessageAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
+    'sendSignal' : IDL.Func(
+        [SessionToken, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
+    'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+    'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'unlikePost' : IDL.Func([IDL.Nat], [], []),
+    'unlikePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'updateLocalUserDisplayName' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Text],
+        [],
+      ),
+    'updateLocalUserPhoto' : IDL.Func([SessionToken, ExternalBlob], [], []),
+    'updateProfileSettings' : IDL.Func(
+        [SessionToken, IDL.Bool, IDL.Bool],
+        [],
+        [],
+      ),
+    'updateUser' : IDL.Func([ExternalBlob], [], []),
+    'updateUserWithoutPhoto' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'validateSessionToken' : IDL.Func(
+        [SessionToken],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
     'verifyUser' : IDL.Func([], [], []),
-    'registerLocalAccount': IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)], [], []),
-    'loginLocalAccount': IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
-    'logoutLocalAccount': IDL.Func([IDL.Nat], [], []),
-    'validateSessionToken': IDL.Func([IDL.Nat], [IDL.Opt(IDL.Text)], ['query']),
-    'getLocalUserProfile': IDL.Func([IDL.Nat], [IDL.Opt(LocalUser)], ['query']),
-    'updateLocalUserPhoto': IDL.Func([IDL.Nat, ExternalBlob], [], []),
-    'getLocalUsers': IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
-    'sendMessageAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-    'getMessagesAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Message)], ['query']),
-    'sendDirectMessage': IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [IDL.Nat], []),
-    'getDirectMessages': IDL.Func([IDL.Nat, IDL.Text], [IDL.Vec(DirectMessage)], ['query']),
-    'getConversations': IDL.Func([IDL.Nat], [IDL.Vec(ConversationSummary)], ['query']),
-    'markDirectMessagesRead': IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'getUnreadDMCount': IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
-    'createPostAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-    'getPostsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
-    'deletePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'likePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'unlikePostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'getPostLikesAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
-    'addCommentAsLocal': IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [IDL.Nat], []),
-    'getCommentsForPostAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [IDL.Vec(Comment)], ['query']),
-    'deleteCommentAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'joinVoiceChannel': IDL.Func([IDL.Nat], [IDL.Vec(VoiceParticipant)], []),
-    'leaveVoiceChannel': IDL.Func([IDL.Nat], [], []),
-    'getVoiceParticipants': IDL.Func([IDL.Nat], [IDL.Vec(VoiceParticipant)], ['query']),
-    'sendSignal': IDL.Func([IDL.Nat, IDL.Text, IDL.Text, IDL.Text], [], []),
-    'getMySignals': IDL.Func([IDL.Nat], [IDL.Vec(Signal)], []),
-    'setMicActive': IDL.Func([IDL.Nat, IDL.Bool], [], []),
-    'sendCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
-    'getCallRequestsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(LocalCallRequest)], ['query']),
-    'acceptCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'denyCallRequestAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'endCallAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'getNotificationsAsLocal': IDL.Func([IDL.Nat], [IDL.Vec(Notification)], ['query']),
-    'markNotificationReadAsLocal': IDL.Func([IDL.Nat, IDL.Nat], [], []),
-    'markAllNotificationsReadAsLocal': IDL.Func([IDL.Nat], [], []),
   });
 };
 

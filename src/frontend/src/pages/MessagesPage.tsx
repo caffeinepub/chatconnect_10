@@ -3,18 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Loader2,
-  LogOut,
-  Mail,
-  MessageCircle,
-  Newspaper,
-  Send,
-  UserCircle,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, Inbox, Loader2, LogOut, Send } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -25,7 +14,6 @@ import type {
 import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
 import { useActor } from "../hooks/useActor";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
 
 const AVATAR_GRADIENTS = [
@@ -54,7 +42,6 @@ function relativeTime(timestamp: bigint): string {
 
 export default function MessagesPage() {
   const navigate = useNavigate();
-  const { identity } = useInternetIdentity();
   const { localSession, isLocalLoggedIn, logoutLocal } = useLocalAuth();
   const { actor } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
@@ -70,10 +57,10 @@ export default function MessagesPage() {
 
   // Auth guard
   useEffect(() => {
-    if (!identity && !isLocalLoggedIn) {
+    if (!isLocalLoggedIn) {
       navigate({ to: "/login" });
     }
-  }, [identity, isLocalLoggedIn, navigate]);
+  }, [isLocalLoggedIn, navigate]);
 
   // Check URL param for pre-selected user
   useEffect(() => {
@@ -150,7 +137,6 @@ export default function MessagesPage() {
       return;
     const text = messageText.trim();
     setMessageText("");
-    // Optimistic update
     const optimistic: DirectMessage = {
       id: BigInt(Date.now()),
       senderUsername: localSession.username,
@@ -185,11 +171,14 @@ export default function MessagesPage() {
     selectedConvo?.otherDisplayName || selectedUser || "";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div
+      className="fixed inset-0 bg-background flex flex-col"
+      style={{ paddingBottom: "calc(56px + env(safe-area-inset-bottom, 0px))" }}
+    >
       <GlobalCallWatcher />
 
       {/* Header */}
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
+      <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
             W
@@ -209,8 +198,8 @@ export default function MessagesPage() {
         </nav>
       </header>
 
-      {/* Main two-panel layout */}
-      <main className="flex flex-1 max-w-6xl mx-auto w-full px-4 py-6 pb-24 gap-4">
+      {/* Main two-panel layout — fills remaining height */}
+      <div className="flex flex-1 overflow-hidden gap-3 p-3">
         {/* Conversation List */}
         <motion.div
           initial={{ opacity: 0, x: -16 }}
@@ -221,12 +210,12 @@ export default function MessagesPage() {
           } flex-col w-full md:w-80 flex-shrink-0 bg-white rounded-2xl border border-border shadow-sm overflow-hidden`}
           data-ocid="messages.panel"
         >
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-            <Mail className="h-5 w-5 text-primary" />
-            <h2 className="font-display font-semibold text-base">Messages</h2>
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+            <Inbox className="h-5 w-5 text-primary" />
+            <h2 className="font-display font-semibold text-base">Inbox</h2>
           </div>
 
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             {isLoadingConvos ? (
               <div
                 className="flex items-center justify-center py-12"
@@ -240,7 +229,7 @@ export default function MessagesPage() {
                 data-ocid="messages.empty_state"
               >
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Mail className="h-8 w-8 text-primary/50" />
+                  <Inbox className="h-8 w-8 text-primary/50" />
                 </div>
                 <p className="text-sm text-muted-foreground">
                   No conversations yet. Message someone from their Calling Card.
@@ -289,7 +278,7 @@ export default function MessagesPage() {
                 </button>
               ))
             )}
-          </ScrollArea>
+          </div>
         </motion.div>
 
         {/* Chat Thread */}
@@ -305,7 +294,7 @@ export default function MessagesPage() {
           {!selectedUser ? (
             <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-teal-500/20 flex items-center justify-center">
-                <Mail className="h-10 w-10 text-primary/40" />
+                <Inbox className="h-10 w-10 text-primary/40" />
               </div>
               <p className="text-muted-foreground">
                 Select a conversation to start chatting
@@ -314,7 +303,7 @@ export default function MessagesPage() {
           ) : (
             <>
               {/* Thread header */}
-              <div className="px-4 py-3 border-b border-border flex items-center gap-3">
+              <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -340,7 +329,7 @@ export default function MessagesPage() {
               </div>
 
               {/* Messages */}
-              <ScrollArea className="flex-1 px-4 py-4">
+              <div className="flex-1 overflow-y-auto px-4 py-4">
                 <div className="flex flex-col gap-3">
                   {messages.length === 0 ? (
                     <div
@@ -358,7 +347,7 @@ export default function MessagesPage() {
                           key={msg.id.toString()}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.2, delay: idx < 5 ? 0 : 0 }}
+                          transition={{ duration: 0.2 }}
                           className={`flex ${
                             isMe ? "justify-end" : "justify-start"
                           }`}
@@ -393,10 +382,10 @@ export default function MessagesPage() {
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-              </ScrollArea>
+              </div>
 
               {/* Send input */}
-              <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+              <div className="px-4 py-3 border-t border-border flex items-center gap-2 flex-shrink-0">
                 <Input
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
@@ -427,20 +416,8 @@ export default function MessagesPage() {
             </>
           )}
         </motion.div>
-      </main>
+      </div>
 
-      {/* Footer */}
-      <footer className="border-t border-border py-3 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()}. Built with love using{" "}
-        <a
-          href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-          className="underline hover:text-foreground"
-          target="_blank"
-          rel="noreferrer"
-        >
-          caffeine.ai
-        </a>
-      </footer>
       <BottomNav />
     </div>
   );

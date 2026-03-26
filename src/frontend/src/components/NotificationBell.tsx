@@ -11,7 +11,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type {
-  AppNotification,
+  Notification as AppNotification,
   backendInterface as ExtendedBackend,
 } from "../backend.d";
 import { useActor } from "../hooks/useActor";

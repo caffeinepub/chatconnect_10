@@ -10,19 +10,96 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface CallRequest {
+export interface CallRequestWithStatus {
   'id' : bigint,
+  'status' : CallStatus,
   'timestamp' : Time,
   'callee' : Principal,
   'caller' : Principal,
 }
+export type CallStatus = { 'pending' : null } |
+  { 'denied' : null } |
+  { 'ended' : null } |
+  { 'accepted' : null };
+export interface Comment {
+  'id' : bigint,
+  'text' : string,
+  'authorName' : string,
+  'author' : Principal,
+  'timestamp' : Time,
+  'postId' : bigint,
+}
+export interface ConversationSummary {
+  'otherUsername' : string,
+  'lastMessage' : string,
+  'unreadCount' : bigint,
+  'lastTimestamp' : Time,
+  'otherDisplayName' : string,
+}
+export interface DirectMessage {
+  'id' : bigint,
+  'text' : string,
+  'senderUsername' : string,
+  'isRead' : boolean,
+  'timestamp' : Time,
+  'recipientUsername' : string,
+}
 export type ExternalBlob = Uint8Array;
+export interface LocalCallRequest {
+  'id' : bigint,
+  'status' : CallStatus,
+  'callerUsername' : string,
+  'timestamp' : Time,
+  'calleeUsername' : string,
+}
+export interface LocalUser {
+  'age' : bigint,
+  'username' : string,
+  'displayName' : string,
+  'lastNameChange' : [] | [Time],
+  'passwordHash' : string,
+  'photo' : [] | [ExternalBlob],
+}
 export interface Message {
   'id' : bigint,
   'text' : string,
   'authorName' : string,
   'author' : Principal,
   'timestamp' : Time,
+}
+export interface Notification {
+  'id' : bigint,
+  'postText' : [] | [string],
+  'callRequestId' : [] | [bigint],
+  'actorName' : string,
+  'notifType' : NotificationType,
+  'isRead' : boolean,
+  'timestamp' : Time,
+  'recipientUsername' : string,
+  'postId' : [] | [bigint],
+}
+export type NotificationType = { 'like' : null } |
+  { 'comment' : null } |
+  { 'callRequest' : null };
+export interface Post {
+  'id' : bigint,
+  'text' : string,
+  'authorName' : string,
+  'author' : Principal,
+  'timestamp' : Time,
+}
+export interface ProfileSettings {
+  'hideFollowers' : boolean,
+  'hideFollowing' : boolean,
+}
+export type SessionToken = bigint;
+export interface Signal {
+  'id' : bigint,
+  'data' : string,
+  'toUsername' : string,
+  'timestamp' : Time,
+  'fromUsername' : string,
+  'signalType' : string,
 }
 export type Time = bigint;
 export interface User {
@@ -42,6 +119,11 @@ export interface UserProfile {
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface VoiceParticipant {
+  'username' : string,
+  'displayName' : string,
+  'isMicActive' : boolean,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -52,68 +134,6 @@ export interface _CaffeineStorageRefillInformation {
 export interface _CaffeineStorageRefillResult {
   'success' : [] | [boolean],
   'topped_up_amount' : [] | [bigint],
-}
-export interface LocalUser {
-  'username': string;
-  'displayName': string;
-  'passwordHash': string;
-  'age': bigint;
-  'photo': [] | [ExternalBlob];
-}
-export interface Post {
-  'id': bigint;
-  'author': Principal;
-  'authorName': string;
-  'text': string;
-  'timestamp': Time;
-}
-export interface Comment {
-  'id': bigint;
-  'postId': bigint;
-  'author': Principal;
-  'authorName': string;
-  'text': string;
-  'timestamp': Time;
-}
-export interface VoiceParticipant {
-  'username': string;
-  'displayName': string;
-  'isMicActive': boolean;
-}
-export interface Signal {
-  'id': bigint;
-  'fromUsername': string;
-  'toUsername': string;
-  'signalType': string;
-  'data': string;
-  'timestamp': Time;
-}
-export type NotificationType = { 'like': null } | { 'comment': null } | { 'callRequest': null };
-export interface Notification {
-  'id': bigint;
-  'recipientUsername': string;
-  'notifType': NotificationType;
-  'actorName': string;
-  'postId': [] | [bigint];
-  'postText': [] | [string];
-  'callRequestId': [] | [bigint];
-  'timestamp': Time;
-  'isRead': boolean;
-}
-export interface DirectMessage {
-  'id': bigint;
-  'senderUsername': string;
-  'recipientUsername': string;
-  'text': string;
-  'timestamp': Time;
-  'isRead': boolean;
-}
-export interface ConversationSummary {
-  'otherUsername': string;
-  'otherDisplayName': string;
-  'lastMessage': string;
-  'lastTimestamp': Time;
-  'unreadCount': bigint;
 }
 export interface _SERVICE {
   '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
@@ -132,59 +152,109 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'acceptCallRequest' : ActorMethod<[bigint], undefined>,
+  'acceptCallRequestAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'addComment' : ActorMethod<[bigint, string], bigint>,
+  'addCommentAsLocal' : ActorMethod<[SessionToken, bigint, string], bigint>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'assignRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'blockUser' : ActorMethod<[SessionToken, string], undefined>,
+  'createPost' : ActorMethod<[string], bigint>,
+  'createPostAsLocal' : ActorMethod<[SessionToken, string], bigint>,
   'createUser' : ActorMethod<[string, string, string], undefined>,
+  'deleteCallRequest' : ActorMethod<[bigint], undefined>,
+  'deleteComment' : ActorMethod<[bigint], undefined>,
+  'deleteCommentAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'deletePost' : ActorMethod<[bigint], undefined>,
+  'deletePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
   'deleteUser' : ActorMethod<[Principal], undefined>,
-  'getCallRequest' : ActorMethod<[bigint], [] | [CallRequest]>,
-  'getCallRequests' : ActorMethod<[], Array<CallRequest>>,
+  'denyCallRequest' : ActorMethod<[bigint], undefined>,
+  'denyCallRequestAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'endCall' : ActorMethod<[bigint], undefined>,
+  'endCallAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'followUser' : ActorMethod<[SessionToken, string], undefined>,
+  'getBlockedUsers' : ActorMethod<[SessionToken], Array<string>>,
+  'getCallRequest' : ActorMethod<[bigint], [] | [CallRequestWithStatus]>,
+  'getCallRequests' : ActorMethod<[], Array<CallRequestWithStatus>>,
+  'getCallRequestsAsLocal' : ActorMethod<
+    [SessionToken],
+    Array<LocalCallRequest>
+  >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getCommentsForPost' : ActorMethod<[bigint], Array<Comment>>,
+  'getCommentsForPostAsLocal' : ActorMethod<
+    [SessionToken, bigint],
+    Array<Comment>
+  >,
+  'getConversations' : ActorMethod<[SessionToken], Array<ConversationSummary>>,
+  'getDirectMessages' : ActorMethod<
+    [SessionToken, string],
+    Array<DirectMessage>
+  >,
+  'getFollowers' : ActorMethod<[SessionToken, string], Array<string>>,
+  'getFollowing' : ActorMethod<[SessionToken, string], Array<string>>,
+  'getLocalUserProfile' : ActorMethod<[SessionToken], [] | [LocalUser]>,
+  'getLocalUsers' : ActorMethod<[], Array<LocalUser>>,
   'getMessage' : ActorMethod<[bigint], [] | [Message]>,
   'getMessages' : ActorMethod<[], Array<Message>>,
+  'getMessagesAsLocal' : ActorMethod<[SessionToken], Array<Message>>,
+  'getMySignals' : ActorMethod<[SessionToken], Array<Signal>>,
+  'getNotificationsAsLocal' : ActorMethod<[SessionToken], Array<Notification>>,
+  'getPostLikes' : ActorMethod<[bigint], Array<string>>,
+  'getPostLikesAsLocal' : ActorMethod<[SessionToken, bigint], Array<string>>,
+  'getPosts' : ActorMethod<[], Array<Post>>,
+  'getPostsAsLocal' : ActorMethod<[SessionToken], Array<Post>>,
+  'getProfileSettings' : ActorMethod<[SessionToken], ProfileSettings>,
+  'getPublicProfileSettings' : ActorMethod<[string], ProfileSettings>,
+  'getUnreadDMCount' : ActorMethod<[SessionToken], bigint>,
   'getUser' : ActorMethod<[Principal], [] | [User]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsers' : ActorMethod<[], Array<User>>,
   'getUsersCount' : ActorMethod<[], bigint>,
+  'getVoiceParticipants' : ActorMethod<[SessionToken], Array<VoiceParticipant>>,
+  'isBlocked' : ActorMethod<[SessionToken, string], boolean>,
+  'isBlockedBy' : ActorMethod<[SessionToken, string], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isFollowing' : ActorMethod<[SessionToken, string], boolean>,
+  'joinVoiceChannel' : ActorMethod<[SessionToken], Array<VoiceParticipant>>,
+  'leaveVoiceChannel' : ActorMethod<[SessionToken], undefined>,
+  'likePost' : ActorMethod<[bigint], undefined>,
+  'likePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'loginLocalAccount' : ActorMethod<[string, string], SessionToken>,
+  'logoutLocalAccount' : ActorMethod<[SessionToken], undefined>,
+  'markAllNotificationsReadAsLocal' : ActorMethod<[SessionToken], undefined>,
+  'markDirectMessagesRead' : ActorMethod<[SessionToken, string], undefined>,
+  'markNotificationReadAsLocal' : ActorMethod<
+    [SessionToken, bigint],
+    undefined
+  >,
+  'registerLocalAccount' : ActorMethod<
+    [string, string, string, bigint, [] | [ExternalBlob]],
+    undefined
+  >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'sendCallRequest' : ActorMethod<[Principal], bigint>,
+  'sendCallRequestAsLocal' : ActorMethod<[SessionToken, string], bigint>,
+  'sendDirectMessage' : ActorMethod<[SessionToken, string, string], bigint>,
+  'sendMessage' : ActorMethod<[string], bigint>,
+  'sendMessageAsLocal' : ActorMethod<[SessionToken, string], bigint>,
+  'sendSignal' : ActorMethod<[SessionToken, string, string, string], undefined>,
+  'setMicActive' : ActorMethod<[SessionToken, boolean], undefined>,
+  'unblockUser' : ActorMethod<[SessionToken, string], undefined>,
+  'unfollowUser' : ActorMethod<[SessionToken, string], undefined>,
+  'unlikePost' : ActorMethod<[bigint], undefined>,
+  'unlikePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'updateLocalUserDisplayName' : ActorMethod<[SessionToken, string], string>,
+  'updateLocalUserPhoto' : ActorMethod<[SessionToken, ExternalBlob], undefined>,
+  'updateProfileSettings' : ActorMethod<
+    [SessionToken, boolean, boolean],
+    undefined
+  >,
+  'updateUser' : ActorMethod<[ExternalBlob], undefined>,
+  'updateUserWithoutPhoto' : ActorMethod<[string, string, string], undefined>,
+  'validateSessionToken' : ActorMethod<[SessionToken], [] | [string]>,
   'verifyUser' : ActorMethod<[], undefined>,
-  'registerLocalAccount': ActorMethod<[string, string, string, bigint, [] | [ExternalBlob]], undefined>;
-  'loginLocalAccount': ActorMethod<[string, string], bigint>;
-  'logoutLocalAccount': ActorMethod<[bigint], undefined>;
-  'validateSessionToken': ActorMethod<[bigint], [] | [string]>;
-  'getLocalUserProfile': ActorMethod<[bigint], [] | [LocalUser]>;
-  'updateLocalUserPhoto': ActorMethod<[bigint, ExternalBlob], undefined>;
-  'getLocalUsers': ActorMethod<[], Array<LocalUser>>;
-  'sendMessageAsLocal': ActorMethod<[bigint, string], bigint>;
-  'getMessagesAsLocal': ActorMethod<[bigint], Array<Message>>;
-  'sendDirectMessage': ActorMethod<[bigint, string, string], bigint>;
-  'getDirectMessages': ActorMethod<[bigint, string], Array<DirectMessage>>;
-  'getConversations': ActorMethod<[bigint], Array<ConversationSummary>>;
-  'markDirectMessagesRead': ActorMethod<[bigint, string], undefined>;
-  'getUnreadDMCount': ActorMethod<[bigint], bigint>;
-  'createPostAsLocal': ActorMethod<[bigint, string], bigint>;
-  'getPostsAsLocal': ActorMethod<[bigint], Array<Post>>;
-  'deletePostAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'likePostAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'unlikePostAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'getPostLikesAsLocal': ActorMethod<[bigint, bigint], Array<string>>;
-  'addCommentAsLocal': ActorMethod<[bigint, bigint, string], bigint>;
-  'getCommentsForPostAsLocal': ActorMethod<[bigint, bigint], Array<Comment>>;
-  'deleteCommentAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'joinVoiceChannel': ActorMethod<[bigint], Array<VoiceParticipant>>;
-  'leaveVoiceChannel': ActorMethod<[bigint], undefined>;
-  'getVoiceParticipants': ActorMethod<[bigint], Array<VoiceParticipant>>;
-  'sendSignal': ActorMethod<[bigint, string, string, string], undefined>;
-  'getMySignals': ActorMethod<[bigint], Array<Signal>>;
-  'setMicActive': ActorMethod<[bigint, boolean], undefined>;
-  'sendCallRequestAsLocal': ActorMethod<[bigint, string], bigint>;
-  'getCallRequestsAsLocal': ActorMethod<[bigint], Array<any>>;
-  'acceptCallRequestAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'denyCallRequestAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'endCallAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'getNotificationsAsLocal': ActorMethod<[bigint], Array<Notification>>;
-  'markNotificationReadAsLocal': ActorMethod<[bigint, bigint], undefined>;
-  'markAllNotificationsReadAsLocal': ActorMethod<[bigint], undefined>;
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

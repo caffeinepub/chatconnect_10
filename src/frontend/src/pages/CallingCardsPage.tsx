@@ -9,11 +9,13 @@ import {
   Phone,
   PhoneCall,
   PhoneMissed,
-  UserCircle,
-  Users,
+  ShieldOff,
+  UserCheck,
+  UserPlus,
+  UserX,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type {
   backendInterface as ExtendedBackend,
@@ -147,6 +149,8 @@ function LocalCallingCard({
   hasPendingOutgoing,
   onCall,
   isCalling,
+  extActor,
+  token,
 }: {
   user: LocalUser;
   index: number;
@@ -154,10 +158,84 @@ function LocalCallingCard({
   hasPendingOutgoing: boolean;
   onCall: () => void;
   isCalling: boolean;
+  extActor: ExtendedBackend | null;
+  token: bigint | undefined;
 }) {
   const navigate = useNavigate();
   const isMe = user.username === myUsername;
   const gradient = getGradient(user.username);
+
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [loadingFollow, setLoadingFollow] = useState(false);
+  const [loadingBlock, setLoadingBlock] = useState(false);
+  const [followersCount, setFollowersCount] = useState<number | null>(null);
+  const [followingCount, setFollowingCount] = useState<number | null>(null);
+
+  // Load initial follow/block state and follower counts
+  useEffect(() => {
+    if (!extActor || !token || isMe) return;
+    Promise.all([
+      extActor.isFollowing(token, user.username).catch(() => false),
+      extActor.isBlocked(token, user.username).catch(() => false),
+      extActor.getPublicProfileSettings(user.username).catch(() => null),
+    ]).then(async ([following, blocked, settings]) => {
+      setIsFollowing(following);
+      setIsBlocked(blocked);
+      if (settings) {
+        const [f1, f2] = await Promise.all([
+          settings.hideFollowers
+            ? Promise.resolve(null)
+            : extActor.getFollowers(token, user.username).catch(() => null),
+          settings.hideFollowing
+            ? Promise.resolve(null)
+            : extActor.getFollowing(token, user.username).catch(() => null),
+        ]);
+        if (f1 !== null) setFollowersCount(f1.length);
+        if (f2 !== null) setFollowingCount(f2.length);
+      }
+    });
+  }, [extActor, token, user.username, isMe]);
+
+  const handleFollow = async () => {
+    if (!extActor || !token) return;
+    setLoadingFollow(true);
+    try {
+      if (isFollowing) {
+        await extActor.unfollowUser(token, user.username);
+        setIsFollowing(false);
+        toast.success(`Unfollowed ${user.displayName}`);
+      } else {
+        await extActor.followUser(token, user.username);
+        setIsFollowing(true);
+        toast.success(`Following ${user.displayName}!`);
+      }
+    } catch {
+      toast.error("Action failed");
+    } finally {
+      setLoadingFollow(false);
+    }
+  };
+
+  const handleBlock = async () => {
+    if (!extActor || !token) return;
+    setLoadingBlock(true);
+    try {
+      if (isBlocked) {
+        await extActor.unblockUser(token, user.username);
+        setIsBlocked(false);
+        toast.success(`Unblocked ${user.displayName}`);
+      } else {
+        await extActor.blockUser(token, user.username);
+        setIsBlocked(true);
+        toast.success(`Blocked ${user.displayName}`);
+      }
+    } catch {
+      toast.error("Action failed");
+    } finally {
+      setLoadingBlock(false);
+    }
+  };
 
   return (
     <motion.div
@@ -189,9 +267,87 @@ function LocalCallingCard({
           {user.displayName}
         </h3>
         <p className="text-white/60 text-sm mb-1">Age {user.age.toString()}</p>
-        <p className="text-white/40 text-xs mb-3">@{user.username}</p>
+        <p className="text-white/40 text-xs mb-2">@{user.username}</p>
+
+        {/* Followers / Following counts */}
+        {!isMe && (followersCount !== null || followingCount !== null) && (
+          <div className="flex items-center gap-3 mb-3 text-xs text-white/60">
+            {followersCount !== null && (
+              <span>
+                <span className="font-semibold text-white">
+                  {followersCount}
+                </span>{" "}
+                followers
+              </span>
+            )}
+            {followersCount !== null && followingCount !== null && (
+              <span className="text-white/30">•</span>
+            )}
+            {followingCount !== null && (
+              <span>
+                <span className="font-semibold text-white">
+                  {followingCount}
+                </span>{" "}
+                following
+              </span>
+            )}
+          </div>
+        )}
+
+        {!isMe && <div className="mb-2" />}
+        {isMe && (
+          <span className="text-xs bg-primary/40 text-white px-3 py-0.5 rounded-full mb-3">
+            You
+          </span>
+        )}
 
         <div className="w-full flex flex-col gap-2">
+          {/* Follow / Block row for non-self */}
+          {!isMe && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleFollow}
+                disabled={loadingFollow}
+                className={`flex-1 py-2 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  isFollowing
+                    ? "bg-white/20 hover:bg-white/30 text-white"
+                    : "bg-indigo-500/80 hover:bg-indigo-500 text-white"
+                } disabled:opacity-50`}
+                data-ocid={`cards.toggle.${index + 1}`}
+              >
+                {loadingFollow ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : isFollowing ? (
+                  <UserCheck className="h-3 w-3" />
+                ) : (
+                  <UserPlus className="h-3 w-3" />
+                )}
+                {isFollowing ? "Following" : "Follow"}
+              </button>
+              <button
+                type="button"
+                onClick={handleBlock}
+                disabled={loadingBlock}
+                className={`px-3 py-2 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  isBlocked
+                    ? "bg-red-500/60 hover:bg-red-500/80 text-white"
+                    : "bg-white/10 hover:bg-white/20 text-white/70 hover:text-white"
+                } disabled:opacity-50`}
+                data-ocid={`cards.delete_button.${index + 1}`}
+              >
+                {loadingBlock ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : isBlocked ? (
+                  <ShieldOff className="h-3 w-3" />
+                ) : (
+                  <UserX className="h-3 w-3" />
+                )}
+                {isBlocked ? "Unblock" : "Block"}
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() =>
@@ -496,6 +652,8 @@ export default function CallingCardsPage() {
                       hasPendingOutgoing={!!pendingOutgoing}
                       onCall={() => handleLocalCall(user.username)}
                       isCalling={sendCallRequestAsLocal.isPending}
+                      extActor={isLocalLoggedIn ? extActor : null}
+                      token={localSession?.token}
                     />
                   </div>
                 );
