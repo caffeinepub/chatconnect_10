@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { ServerStatusBanner } from "./components/ServerStatusBanner";
 import CallScreen from "./pages/CallScreen";
 import CallingCardsPage from "./pages/CallingCardsPage";
 import FeedPage from "./pages/FeedPage";
@@ -98,6 +99,7 @@ declare module "@tanstack/react-router" {
 export default function App() {
   return (
     <>
+      <ServerStatusBanner />
       <RouterProvider router={router} />
       <Toaster richColors position="top-right" />
     </>

@@ -105,7 +105,7 @@ export default function LobbyPage() {
       }
     };
     fetchLocalMessages();
-    const interval = setInterval(fetchLocalMessages, 3000);
+    const interval = setInterval(fetchLocalMessages, 1500);
     return () => clearInterval(interval);
   }, [isLocalLoggedIn, extActor, localSession]);
 

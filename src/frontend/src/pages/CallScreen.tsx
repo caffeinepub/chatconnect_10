@@ -255,6 +255,7 @@ export default function CallScreen() {
   const signalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const webrtcInitialized = useRef(false);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEndCallRef = useRef<(autoEnd?: boolean) => Promise<void>>(
     async () => {},
@@ -288,6 +289,10 @@ export default function CallScreen() {
   }, [callRequest]);
 
   const cleanupWebRTC = useCallback(() => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
     if (signalPollRef.current) {
       clearInterval(signalPollRef.current);
       signalPollRef.current = null;
@@ -493,14 +498,48 @@ export default function CallScreen() {
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
         if (state === "connected" || state === "completed") {
+          // Clear watchdog — connection succeeded
+          if (watchdogRef.current) {
+            clearTimeout(watchdogRef.current);
+            watchdogRef.current = null;
+          }
           setIsConnected(true);
         } else if (state === "failed") {
           pc.restartIce();
           setIsConnected(false);
+          // Reset watchdog for the ICE restart attempt
+          if (watchdogRef.current) clearTimeout(watchdogRef.current);
+          watchdogRef.current = setTimeout(() => {
+            if (
+              pcRef.current &&
+              pcRef.current.iceConnectionState === "failed"
+            ) {
+              toast.error("Voice connection failed. Please end and try again.");
+            }
+          }, 15000);
         } else if (state === "disconnected") {
           setIsConnected(false);
+          // Attempt auto-recovery after 3s
+          setTimeout(() => {
+            if (
+              pcRef.current &&
+              pcRef.current.iceConnectionState === "disconnected"
+            ) {
+              pcRef.current.restartIce();
+            }
+          }, 3000);
         }
       };
+
+      // Watchdog: if not connected within 25s, restart ICE once
+      watchdogRef.current = setTimeout(() => {
+        if (!pcRef.current) return;
+        const state = pcRef.current.iceConnectionState;
+        if (state !== "connected" && state !== "completed") {
+          pcRef.current.restartIce();
+          toast.info("Slow connection — retrying ICE...");
+        }
+      }, 25000);
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
