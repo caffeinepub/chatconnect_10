@@ -307,6 +307,8 @@ export interface backendInterface {
     unlikePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
     updateLocalUserDisplayName(token: SessionToken, newDisplayName: string): Promise<string>;
     updateLocalUserPhoto(token: SessionToken, photo: ExternalBlob): Promise<void>;
+    updateLocalUserBio(token: SessionToken, bio: string): Promise<void>;
+    getUserBio(username: string): Promise<string | null>;
     updateProfileSettings(token: SessionToken, hideFollowers: boolean, hideFollowing: boolean): Promise<void>;
     updateUser(photo: ExternalBlob): Promise<void>;
     updateUserWithoutPhoto(name: string, fname: string, telephone: string): Promise<void>;
@@ -1282,6 +1284,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async pingOnline(arg0: SessionToken): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.pingOnline(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.pingOnline(arg0);
+            return result;
+        }
+    }
+    async getOnlineUsernames(): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOnlineUsernames();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOnlineUsernames();
+            return result;
+        }
+    }
     async markAllNotificationsReadAsLocal(arg0: SessionToken): Promise<void> {
         if (this.processError) {
             try {
@@ -1532,6 +1562,34 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.updateLocalUserPhoto(arg0, await to_candid_ExternalBlob_n43(this._uploadFile, this._downloadFile, arg1));
             return result;
+        }
+    }
+    async updateLocalUserBio(arg0: SessionToken, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateLocalUserBio(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateLocalUserBio(arg0, arg1);
+            return result;
+        }
+    }
+    async getUserBio(arg0: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserBio(arg0);
+                return Array.isArray(result) ? (result[0] ?? null) : result ?? null;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserBio(arg0);
+            return Array.isArray(result) ? (result[0] ?? null) : result ?? null;
         }
     }
     async updateProfileSettings(arg0: SessionToken, arg1: boolean, arg2: boolean): Promise<void> {

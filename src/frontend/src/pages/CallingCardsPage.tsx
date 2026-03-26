@@ -97,7 +97,6 @@ function CallingCard({
               {name.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0B102A]" />
         </div>
 
         <h3 className="font-display font-semibold text-lg mb-1">{name}</h3>
@@ -151,6 +150,7 @@ function LocalCallingCard({
   isCalling,
   extActor,
   token,
+  isOnline,
 }: {
   user: LocalUser;
   index: number;
@@ -160,6 +160,7 @@ function LocalCallingCard({
   isCalling: boolean;
   extActor: ExtendedBackend | null;
   token: bigint | undefined;
+  isOnline: boolean;
 }) {
   const navigate = useNavigate();
   const isMe = user.username === myUsername;
@@ -171,6 +172,7 @@ function LocalCallingCard({
   const [loadingBlock, setLoadingBlock] = useState(false);
   const [followersCount, setFollowersCount] = useState<number | null>(null);
   const [followingCount, setFollowingCount] = useState<number | null>(null);
+  const [userBio, setUserBio] = useState<string>("");
 
   // Load initial follow/block state and follower counts
   useEffect(() => {
@@ -196,6 +198,15 @@ function LocalCallingCard({
       }
     });
   }, [extActor, token, user.username, isMe]);
+
+  // Load bio
+  useEffect(() => {
+    if (!extActor) return;
+    extActor
+      .getUserBio(user.username)
+      .then((b) => setUserBio(b ?? ""))
+      .catch(() => {});
+  }, [extActor, user.username]);
 
   const handleFollow = async () => {
     if (!extActor || !token) return;
@@ -260,7 +271,9 @@ function LocalCallingCard({
               {user.displayName.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0B102A]" />
+          {isOnline && (
+            <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0B102A]" />
+          )}
         </div>
 
         <h3 className="font-display font-semibold text-lg mb-1">
@@ -268,6 +281,11 @@ function LocalCallingCard({
         </h3>
         <p className="text-white/60 text-sm mb-1">Age {user.age.toString()}</p>
         <p className="text-white/40 text-xs mb-2">@{user.username}</p>
+        {userBio && (
+          <p className="text-white/60 text-xs mb-2 leading-relaxed line-clamp-2">
+            {userBio}
+          </p>
+        )}
 
         {/* Followers / Following counts */}
         {!isMe && (followersCount !== null || followingCount !== null) && (
@@ -418,6 +436,16 @@ export default function CallingCardsPage() {
     },
     enabled: !!extActor && !actorFetching,
     refetchInterval: 10000,
+  });
+
+  const { data: onlineUsernames = [] } = useQuery<string[]>({
+    queryKey: ["onlineUsernames"],
+    queryFn: async () => {
+      if (!extActor) return [];
+      return extActor.getOnlineUsernames();
+    },
+    enabled: !!extActor && !actorFetching,
+    refetchInterval: 15000,
   });
 
   const { data: callRequests = [] } = useGetCallRequestsAsLocal(
@@ -654,6 +682,7 @@ export default function CallingCardsPage() {
                       isCalling={sendCallRequestAsLocal.isPending}
                       extActor={isLocalLoggedIn ? extActor : null}
                       token={localSession?.token}
+                      isOnline={onlineUsernames.includes(user.username)}
                     />
                   </div>
                 );

@@ -106,6 +106,17 @@ export function BottomNav() {
     return () => clearInterval(interval);
   }, [isLocalLoggedIn, fetchNotifications]);
 
+  // Presence heartbeat - ping every 30s when logged in
+  useEffect(() => {
+    if (!isLocalLoggedIn || !localSession || !extActor) return;
+    const ping = () => {
+      extActor.pingOnline(localSession.token).catch(() => {});
+    };
+    ping(); // ping immediately on mount
+    const interval = setInterval(ping, 30_000);
+    return () => clearInterval(interval);
+  }, [isLocalLoggedIn, localSession, extActor]);
+
   const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
 
   const handleClickNotif = async (notif: AppNotification) => {

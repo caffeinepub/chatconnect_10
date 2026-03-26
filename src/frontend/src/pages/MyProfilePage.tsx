@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Camera,
@@ -42,6 +43,8 @@ export default function MyProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editAge, setEditAge] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [bio, setBio] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   // Photo state
@@ -70,7 +73,10 @@ export default function MyProfilePage() {
     extActor
       ?.getLocalUserProfile(localSession.token)
       .then((p) => {
-        if (p) setProfile(p);
+        if (p) {
+          setProfile(p);
+          extActor?.getUserBio(p.username).then((b) => setBio(b ?? ""));
+        }
       })
       .catch(() => {});
   }, [isLocalLoggedIn, actor, localSession, extActor]);
@@ -102,6 +108,7 @@ export default function MyProfilePage() {
   const startEdit = () => {
     setEditName(profile?.displayName ?? localSession?.displayName ?? "");
     setEditAge(profile ? profile.age.toString() : "");
+    setEditBio(bio);
     setIsEditing(true);
   };
 
@@ -125,6 +132,8 @@ export default function MyProfilePage() {
           return;
         }
       }
+      await extActor.updateLocalUserBio(localSession.token, editBio);
+      setBio(editBio);
       toast.success("Profile updated!");
       if (profile) {
         setProfile({
@@ -365,6 +374,21 @@ export default function MyProfilePage() {
                       className="rounded-lg"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-bio">Bio</Label>
+                    <Textarea
+                      id="edit-bio"
+                      value={editBio}
+                      onChange={(e) => setEditBio(e.target.value)}
+                      placeholder="Tell others about yourself..."
+                      className="rounded-lg resize-none"
+                      rows={3}
+                      maxLength={150}
+                    />
+                    <p className="text-xs text-muted-foreground text-right">
+                      {editBio.length}/150
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -375,6 +399,11 @@ export default function MyProfilePage() {
                   {age !== null && (
                     <p className="text-sm text-muted-foreground">
                       Age: {age.toString()}
+                    </p>
+                  )}
+                  {bio && (
+                    <p className="text-sm text-foreground mt-2 leading-relaxed">
+                      {bio}
                     </p>
                   )}
                 </div>

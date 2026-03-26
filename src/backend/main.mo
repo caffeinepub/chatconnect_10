@@ -156,9 +156,11 @@ actor {
 
   let users = Map.empty<Principal, User>();
   let localUsers = Map.empty<Text, LocalUser>();
+  let userBios = Map.empty<Text, Text>();
   let sessions = Map.empty<SessionToken, Text>();
   let voiceParticipants = Map.empty<Text, VoiceParticipant>();
   let voiceSignals = Map.empty<Nat, Signal>();
+  let lastSeen = Map.empty<Text, Time.Time>();
 
   func validateToken(token : SessionToken) : ?Text {
     sessions.get(token)
@@ -1502,8 +1504,37 @@ actor {
     localUsers.add(username, updatedUser);
   };
 
+  public shared func updateLocalUserBio(token : SessionToken, bio : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    userBios.add(username, bio);
+  };
+
+  public query func getUserBio(username : Text) : async ?Text {
+    userBios.get(username);
+  };
+
   public query ({ caller }) func getLocalUsers() : async [LocalUser] {
     localUsers.values().toArray();
+  };
+
+  // Presence: ping to mark user as online
+  public shared func pingOnline(token : SessionToken) : async () {
+    switch (validateToken(token)) {
+      case (?username) { lastSeen.add(username, Time.now()) };
+      case (null) {};
+    };
+  };
+
+  // Presence: get usernames active in last 60 seconds
+  public query func getOnlineUsernames() : async [Text] {
+    let threshold = Time.now() - 60_000_000_000; // 60 seconds in nanoseconds
+    lastSeen.entries()
+      .filter(func((_, t) : (Text, Time.Time)) : Bool { t > threshold })
+      .map(func((u, _) : (Text, Time.Time)) : Text { u })
+      .toArray();
   };
 
   public shared ({ caller }) func createUser(name : Text, fname : Text, telephone : Text) : async () {

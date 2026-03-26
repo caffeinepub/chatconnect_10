@@ -214,9 +214,13 @@ export interface backendInterface {
     unlikePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
     updateLocalUserDisplayName(token: SessionToken, newDisplayName: string): Promise<string>;
     updateLocalUserPhoto(token: SessionToken, photo: ExternalBlob): Promise<void>;
+    updateLocalUserBio(token: SessionToken, bio: string): Promise<void>;
+    getUserBio(username: string): Promise<string | null>;
     updateProfileSettings(token: SessionToken, hideFollowers: boolean, hideFollowing: boolean): Promise<void>;
     updateUser(photo: ExternalBlob): Promise<void>;
     updateUserWithoutPhoto(name: string, fname: string, telephone: string): Promise<void>;
     validateSessionToken(token: SessionToken): Promise<string | null>;
+    pingOnline(token: SessionToken): Promise<void>;
+    getOnlineUsernames(): Promise<Array<string>>;
     verifyUser(): Promise<void>;
 }
