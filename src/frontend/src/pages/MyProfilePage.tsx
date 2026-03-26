@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Camera,
   ChevronRight,
   Headphones,
   LogOut,
@@ -19,8 +20,9 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ExternalBlob } from "../backend";
 import type {
   backendInterface as ExtendedBackend,
   LocalUser,
@@ -41,6 +43,11 @@ export default function MyProfilePage() {
   const [editName, setEditName] = useState("");
   const [editAge, setEditAge] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Photo state
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Followers / Following
   const [followers, setFollowers] = useState<string[]>([]);
@@ -134,6 +141,37 @@ export default function MyProfilePage() {
     }
   };
 
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !extActor || !localSession) return;
+
+    // Show preview immediately
+    const objectUrl = URL.createObjectURL(file);
+    setPhotoPreview(objectUrl);
+
+    setIsUploadingPhoto(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const photoBlob = ExternalBlob.fromBytes(new Uint8Array(arrayBuffer));
+      await extActor.updateLocalUserPhoto(localSession.token, photoBlob);
+      toast.success("Profile picture updated!");
+      // Refresh profile to get new photo URL
+      const updated = await extActor.getLocalUserProfile(localSession.token);
+      if (updated) setProfile(updated);
+    } catch {
+      toast.error("Failed to update profile picture");
+      setPhotoPreview(null);
+    } finally {
+      setIsUploadingPhoto(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const openSettings = async () => {
     setSettingsOpen(true);
     if (!extActor || !localSession) return;
@@ -176,9 +214,21 @@ export default function MyProfilePage() {
       .toUpperCase()
       .slice(0, 2) || username.slice(0, 2).toUpperCase();
 
+  // Resolved photo URL: prefer live preview, then saved photo
+  const photoUrl = photoPreview ?? profile?.photo?.getDirectURL() ?? null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 flex flex-col">
       <GlobalCallWatcher />
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {/* Header */}
       <header className="bg-white border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
@@ -211,11 +261,37 @@ export default function MyProfilePage() {
             {/* Avatar + Edit + Settings */}
             <div className="px-6 pb-6">
               <div className="flex items-end justify-between -mt-12 mb-4">
-                <Avatar className="w-20 h-20 border-4 border-white shadow-md">
-                  <AvatarFallback className="bg-gradient-to-br from-purple-500 to-teal-400 text-white text-2xl font-bold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                {/* Clickable avatar */}
+                <button
+                  type="button"
+                  onClick={handleAvatarClick}
+                  disabled={isUploadingPhoto}
+                  className="relative group focus:outline-none"
+                  aria-label="Change profile picture"
+                  data-ocid="profile.upload_button"
+                >
+                  <Avatar className="w-20 h-20 border-4 border-white shadow-md">
+                    {photoUrl && (
+                      <AvatarImage src={photoUrl} alt={displayName} />
+                    )}
+                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-teal-400 text-white text-2xl font-bold">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Camera overlay */}
+                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    {isUploadingPhoto ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Camera className="h-6 w-6 text-white" />
+                    )}
+                  </div>
+                  {/* Small camera badge */}
+                  <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
+                    <Camera className="h-3 w-3 text-white" />
+                  </div>
+                </button>
+
                 <div className="flex items-center gap-2">
                   {/* Settings gear */}
                   <Button
