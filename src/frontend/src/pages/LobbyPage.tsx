@@ -476,7 +476,8 @@ export default function LobbyPage() {
             <div
               className="p-4 border-t border-border bg-white flex-shrink-0"
               style={{
-                paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+                paddingBottom:
+                  "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
               }}
             >
               {/* Message Input */}
