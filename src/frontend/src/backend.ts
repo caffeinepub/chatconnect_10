@@ -1725,6 +1725,22 @@ export class Backend implements backendInterface {
         await this.actor.unbanLocalUser(arg0, arg1);
     }
 
+    async recordProfileVisit(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.recordProfileVisit(arg0, arg1);
+    }
+    async getProfileVisitors(arg0: bigint, arg1: string): Promise<{count: bigint; visitors: Array<string>}> {
+        const result = await this.actor.getProfileVisitors(arg0, arg1);
+        return result as any;
+    }
+    async setUserStatus(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.setUserStatus(arg0, arg1);
+    }
+    async getUserStatus(arg0: string): Promise<string | null> {
+        const result = await this.actor.getUserStatus(arg0);
+        if (Array.isArray(result) && result.length === 0) return null;
+        if (Array.isArray(result)) return result[0];
+        return result as any;
+    }
     async getAllUsersForAdmin(arg0: bigint): Promise<Array<{username: string; displayName: string; isVerified: boolean; isBanned: boolean}>> {
         const result = await this.actor.getAllUsersForAdmin(arg0);
         return result as any;

@@ -8,12 +8,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "@tanstack/react-router";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type {
   Notification as AppNotification,
   backendInterface as ExtendedBackend,
 } from "../backend.d";
+import { useIsMobile } from "../hooks/use-mobile";
 import { useActor } from "../hooks/useActor";
 import { useLocalAuth } from "../hooks/useLocalAuth";
 
@@ -45,10 +46,70 @@ function notifDest(notif: AppNotification): string {
   return "/feed";
 }
 
+interface NotifPanelContentProps {
+  notifications: AppNotification[];
+  unreadCount: number;
+  onMarkAll: () => void;
+  onClickNotif: (notif: AppNotification) => void;
+}
+
+function NotifPanelContent({
+  notifications,
+  unreadCount,
+  onMarkAll,
+  onClickNotif,
+}: NotifPanelContentProps) {
+  return (
+    <>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <span className="font-semibold text-sm">Notifications</span>
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={onMarkAll}
+            className="text-xs text-primary hover:underline"
+            data-ocid="nav.mark_all_button"
+          >
+            Mark all as read
+          </button>
+        )}
+      </div>
+      <div className="overflow-y-auto flex-1">
+        {notifications.length === 0 ? (
+          <div
+            className="px-4 py-6 text-center text-sm text-muted-foreground"
+            data-ocid="nav.empty_state"
+          >
+            No notifications yet
+          </div>
+        ) : (
+          notifications.map((notif, idx) => (
+            <button
+              key={notif.id.toString()}
+              type="button"
+              className={`w-full flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 text-left hover:bg-muted/50 transition-colors ${
+                !notif.isRead ? "bg-primary/5" : ""
+              }`}
+              onClick={() => onClickNotif(notif)}
+              data-ocid={`nav.item.${idx + 1}`}
+            >
+              <span className="leading-snug">{notifLabel(notif)}</span>
+              <span className="text-xs text-muted-foreground">
+                {relativeTime(notif.timestamp)}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </>
+  );
+}
+
 export function NotificationBell() {
   const { isLocalLoggedIn, localSession } = useLocalAuth();
   const { actor } = useActor();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -106,6 +167,112 @@ export function NotificationBell() {
     }
   };
 
+  const triggerButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="rounded-full relative"
+      data-ocid="nav.bell_button"
+      onClick={isMobile ? () => setOpen((o) => !o) : undefined}
+    >
+      <Bell className="h-4 w-4" />
+      {unreadCount > 0 && (
+        <Badge
+          className="absolute -top-1 -right-1 h-4 w-4 min-w-0 p-0 flex items-center justify-center text-[10px] bg-red-500 text-white border-0"
+          data-ocid="nav.notification_badge"
+        >
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </Badge>
+      )}
+    </Button>
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        {triggerButton}
+
+        {/* Mobile bottom sheet overlay */}
+        {open && (
+          <>
+            {/* Backdrop */}
+            <button
+              type="button"
+              className="fixed inset-0 bg-black/40 z-40 cursor-default"
+              onClick={() => setOpen(false)}
+              aria-label="Close notifications"
+            />
+            {/* Sheet */}
+            <div
+              className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl shadow-2xl flex flex-col"
+              style={{
+                maxHeight: "70vh",
+                paddingBottom: "env(safe-area-inset-bottom, 0)",
+              }}
+              data-ocid="nav.popover"
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 rounded-full bg-border" />
+              </div>
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                <span className="font-semibold text-sm">Notifications</span>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAll}
+                      className="text-xs text-primary hover:underline"
+                      data-ocid="nav.mark_all_button"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="p-1 rounded-full hover:bg-muted transition-colors"
+                    data-ocid="nav.close_button"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {notifications.length === 0 ? (
+                  <div
+                    className="px-4 py-6 text-center text-sm text-muted-foreground"
+                    data-ocid="nav.empty_state"
+                  >
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifications.map((notif, idx) => (
+                    <button
+                      key={notif.id.toString()}
+                      type="button"
+                      className={`w-full flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 text-left hover:bg-muted/50 transition-colors ${
+                        !notif.isRead ? "bg-primary/5" : ""
+                      }`}
+                      onClick={() => handleClickNotif(notif)}
+                      data-ocid={`nav.item.${idx + 1}`}
+                    >
+                      <span className="leading-snug">{notifLabel(notif)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {relativeTime(notif.timestamp)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </>
+    );
+  }
+
+  // Desktop: keep existing dropdown
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -131,45 +298,12 @@ export function NotificationBell() {
         className="w-80 p-0"
         data-ocid="nav.dropdown_menu"
       >
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-          <span className="font-semibold text-sm">Notifications</span>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={handleMarkAll}
-              className="text-xs text-primary hover:underline"
-              data-ocid="nav.mark_all_button"
-            >
-              Mark all as read
-            </button>
-          )}
-        </div>
-        <ScrollArea className="max-h-80">
-          {notifications.length === 0 ? (
-            <div
-              className="px-4 py-6 text-center text-sm text-muted-foreground"
-              data-ocid="nav.empty_state"
-            >
-              No notifications yet
-            </div>
-          ) : (
-            notifications.map((notif, idx) => (
-              <DropdownMenuItem
-                key={notif.id.toString()}
-                className={`flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 ${
-                  !notif.isRead ? "bg-primary/5" : ""
-                }`}
-                onClick={() => handleClickNotif(notif)}
-                data-ocid={`nav.item.${idx + 1}`}
-              >
-                <span className="leading-snug">{notifLabel(notif)}</span>
-                <span className="text-xs text-muted-foreground">
-                  {relativeTime(notif.timestamp)}
-                </span>
-              </DropdownMenuItem>
-            ))
-          )}
-        </ScrollArea>
+        <NotifPanelContent
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkAll={handleMarkAll}
+          onClickNotif={handleClickNotif}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

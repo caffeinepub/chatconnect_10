@@ -311,6 +311,14 @@ export default function CallScreen() {
       remoteAudioRef.current = null;
     }
     pendingIceRef.current = [];
+    // Clear MediaSession on call end
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.playbackState = "none";
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const handleEndCall = useCallback(
@@ -430,6 +438,51 @@ export default function CallScreen() {
     }
   }, [timeLeft, handleEndCall]);
 
+  // Set MediaSession metadata when call becomes connected so audio plays on lock screen
+  const otherUsernameForSession = callRequest
+    ? (localSession?.username ?? "") === callRequest.callerUsername
+      ? callRequest.calleeUsername
+      : callRequest.callerUsername
+    : null;
+
+  useEffect(() => {
+    if (!isConnected) return;
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: "Wave Chat Call",
+          artist: otherUsernameForSession ?? "Unknown",
+        });
+        navigator.mediaSession.playbackState = "playing";
+      }
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        if (navigator.mediaSession) {
+          navigator.mediaSession.playbackState = "none";
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }, [isConnected, otherUsernameForSession]);
+
+  // Resume remote audio when page becomes visible again (screen unlock / unminimize)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && remoteAudioRef.current) {
+        if (remoteAudioRef.current.paused && remoteAudioRef.current.srcObject) {
+          remoteAudioRef.current.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally runs once when callRequest is first available
   useEffect(() => {
     if (!callRequest || !localSession || !extActor || webrtcInitialized.current)
@@ -487,6 +540,9 @@ export default function CallScreen() {
           const audio = document.createElement("audio");
           audio.autoplay = true;
           audio.muted = !speakerOn;
+          // Allow audio to continue playing on lock screen / minimized
+          audio.setAttribute("playsinline", "true");
+          audio.setAttribute("x-webkit-airplay", "allow");
           document.body.appendChild(audio);
           remoteAudioRef.current = audio;
         }

@@ -235,6 +235,10 @@ export interface backendInterface {
     banLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     unbanLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     getAllUsersForAdmin(token: SessionToken): Promise<Array<AdminUserInfo>>;
+    recordProfileVisit(token: SessionToken, visitedUsername: string): Promise<void>;
+    getProfileVisitors(token: SessionToken, username: string): Promise<{count: bigint; visitors: Array<string>}>;
+    setUserStatus(token: SessionToken, status: string): Promise<void>;
+    getUserStatus(username: string): Promise<string | null>;
 }
 
 export interface AdminUserInfo {

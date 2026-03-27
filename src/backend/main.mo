@@ -166,6 +166,8 @@ actor {
   let voiceParticipants = Map.empty<Text, VoiceParticipant>();
   let voiceSignals = Map.empty<Nat, Signal>();
   let lastSeen = Map.empty<Text, Time.Time>();
+  let profileVisitors = Map.empty<Text, Set.Set<Text>>();
+  let userStatuses = Map.empty<Text, Text>();
 
   func validateToken(token : SessionToken) : ?Text {
     sessions.get(token)
@@ -1800,4 +1802,55 @@ actor {
     };
     users.add(caller, updatedUser);
   };
+
+  // ---- Profile Visit Counter ----
+
+  public shared func recordProfileVisit(token : SessionToken, visitedUsername : Text) : async () {
+    let visitorUsername = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return };
+    };
+    if (visitorUsername == visitedUsername) { return };
+    if (areUsersBlocked(visitorUsername, visitedUsername)) { return };
+    let visitors = switch (profileVisitors.get(visitedUsername)) {
+      case (?v) { v };
+      case (null) { Set.empty<Text>() };
+    };
+    visitors.add(visitorUsername);
+    profileVisitors.add(visitedUsername, visitors);
+  };
+
+  public query func getProfileVisitors(token : SessionToken, username : Text) : async { count : Nat; visitors : [Text] } {
+    let callerUsername = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return { count = 0; visitors = [] } };
+    };
+    // Only owner can see full list; others just see count
+    switch (profileVisitors.get(username)) {
+      case (?v) {
+        let arr = v.toArray();
+        if (callerUsername == username) {
+          { count = arr.size(); visitors = arr }
+        } else {
+          { count = arr.size(); visitors = [] }
+        }
+      };
+      case (null) { { count = 0; visitors = [] } };
+    };
+  };
+
+  // ---- Custom Status ----
+
+  public shared func setUserStatus(token : SessionToken, status : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    userStatuses.add(username, status);
+  };
+
+  public query func getUserStatus(username : Text) : async ?Text {
+    userStatuses.get(username);
+  };
+
 };

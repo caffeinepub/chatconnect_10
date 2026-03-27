@@ -30,6 +30,8 @@ const ICE_SERVERS = [
   },
 ];
 
+export type MicPermission = "unknown" | "granted" | "denied" | "prompt";
+
 export function useVoiceChat(token: bigint | null, myUsername: string | null) {
   const { actor } = useActor();
   const voiceActor = actor as backendInterface | null;
@@ -40,6 +42,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
   const [micLevel, setMicLevel] = useState(0);
   const [isMicTesting, setIsMicTesting] = useState(false);
+  const [micPermission, setMicPermission] = useState<MicPermission>("unknown");
 
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const audioElements = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -58,6 +61,41 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
   const pendingIceCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(
     new Map(),
   );
+  // processedSignals set prevents re-processing old signals
+  const processedSignalIds = useRef<Set<string>>(new Set());
+  // Keep a ref to the latest processSignals so the interval always calls the fresh version
+  const processSignalsRef = useRef<() => Promise<void>>(async () => {});
+
+  // Check microphone permission on mount
+  useEffect(() => {
+    if (!navigator.permissions) {
+      setMicPermission("unknown");
+      return;
+    }
+    navigator.permissions
+      .query({ name: "microphone" as PermissionName })
+      .then((result) => {
+        setMicPermission(result.state as MicPermission);
+        result.onchange = () => setMicPermission(result.state as MicPermission);
+      })
+      .catch(() => setMicPermission("unknown"));
+  }, []);
+
+  // Resume all audio elements when page becomes visible again (screen unlock / unminimize)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        for (const el of audioElements.current.values()) {
+          if (el.paused && el.srcObject) {
+            el.play().catch(() => {});
+          }
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const startMicLevelMonitor = useCallback((stream: MediaStream) => {
     try {
@@ -97,9 +135,16 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
 
   const createPeerConnection = useCallback(
     (username: string): RTCPeerConnection => {
+      // Close any existing stale PC first
+      const existing = peerConnections.current.get(username);
+      if (existing) {
+        existing.close();
+        peerConnections.current.delete(username);
+      }
+
       const pc = new RTCPeerConnection({
         iceServers: ICE_SERVERS,
-        iceCandidatePoolSize: 10, // pre-gather candidates before connection
+        iceCandidatePoolSize: 10,
       });
 
       pc.onicecandidate = async (event) => {
@@ -122,6 +167,8 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         if (!audioEl) {
           audioEl = document.createElement("audio");
           audioEl.autoplay = true;
+          audioEl.setAttribute("playsinline", "true");
+          audioEl.setAttribute("x-webkit-airplay", "allow");
           document.body.appendChild(audioEl);
           audioElements.current.set(username, audioEl);
         }
@@ -139,6 +186,14 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           pc.iceConnectionState === "completed"
         ) {
           toast.success(`Voice connected to ${username}!`);
+        }
+        if (pc.iceConnectionState === "disconnected") {
+          // Attempt auto-recovery after 2s
+          setTimeout(() => {
+            if (pc.iceConnectionState === "disconnected") {
+              pc.restartIce();
+            }
+          }, 2000);
         }
       };
 
@@ -179,37 +234,72 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         const from = signal.fromUsername;
         if (from === myUsername) continue;
 
+        // Build a unique key for this signal to avoid reprocessing
+        const sigKey = `${from}:${signal.signalType}:${signal.data.slice(0, 32)}`;
+
         if (signal.signalType === "offer") {
-          let pc = peerConnections.current.get(from);
-          if (!pc) {
-            pc = createPeerConnection(from);
-            addLocalTracks(pc);
-          }
-          const offer = JSON.parse(signal.data);
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          await flushPendingIceCandidates(from, pc);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          try {
-            await voiceActor.sendSignal(
-              token,
-              from,
-              "answer",
-              JSON.stringify(answer),
-            );
-          } catch {
-            // ignore
+          const pc = peerConnections.current.get(from);
+          // Only process if we don't have a PC yet or it's in a state where we can accept an offer
+          const canProcess =
+            !pc ||
+            pc.signalingState === "stable" ||
+            pc.signalingState === "closed";
+
+          if (canProcess && !processedSignalIds.current.has(sigKey)) {
+            processedSignalIds.current.add(sigKey);
+            // Limit cache size
+            if (processedSignalIds.current.size > 500) {
+              const iter = processedSignalIds.current.values();
+              const oldest = iter.next().value;
+              if (oldest !== undefined)
+                processedSignalIds.current.delete(oldest);
+            }
+
+            let activePc = pc && pc.signalingState !== "closed" ? pc : null;
+            if (!activePc) {
+              activePc = createPeerConnection(from);
+              addLocalTracks(activePc);
+            }
+            try {
+              const offer = JSON.parse(signal.data);
+              await activePc.setRemoteDescription(
+                new RTCSessionDescription(offer),
+              );
+              await flushPendingIceCandidates(from, activePc);
+              const answer = await activePc.createAnswer();
+              await activePc.setLocalDescription(answer);
+              try {
+                await voiceActor.sendSignal(
+                  token,
+                  from,
+                  "answer",
+                  JSON.stringify(answer),
+                );
+              } catch {
+                // ignore
+              }
+            } catch {
+              // ignore per-signal errors
+            }
           }
         } else if (signal.signalType === "answer") {
           const pc = peerConnections.current.get(from);
-          if (pc) {
-            const answer = JSON.parse(signal.data);
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            await flushPendingIceCandidates(from, pc);
+          if (
+            pc &&
+            pc.signalingState === "have-local-offer" &&
+            !pc.remoteDescription
+          ) {
+            try {
+              const answer = JSON.parse(signal.data);
+              await pc.setRemoteDescription(new RTCSessionDescription(answer));
+              await flushPendingIceCandidates(from, pc);
+            } catch {
+              // ignore
+            }
           }
         } else if (signal.signalType === "ice") {
           const pc = peerConnections.current.get(from);
-          if (pc) {
+          if (pc && pc.signalingState !== "closed") {
             const candidate = JSON.parse(signal.data) as RTCIceCandidateInit;
             if (!pc.remoteDescription) {
               const pending = pendingIceCandidates.current.get(from) ?? [];
@@ -219,7 +309,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
               try {
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
               } catch {
-                // ignore
+                // ignore duplicate candidates
               }
             }
           }
@@ -237,6 +327,32 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     flushPendingIceCandidates,
   ]);
 
+  // Keep the ref always pointing to the latest version
+  useEffect(() => {
+    processSignalsRef.current = processSignals;
+  }, [processSignals]);
+
+  const requestMicPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      for (const track of stream.getTracks()) track.stop();
+      setMicPermission("granted");
+      return true;
+    } catch (err: unknown) {
+      const error = err as DOMException;
+      if (
+        error.name === "NotAllowedError" ||
+        error.name === "PermissionDeniedError"
+      ) {
+        setMicPermission("denied");
+      }
+      return false;
+    }
+  }, []);
+
   const testMic = useCallback(async () => {
     if (isMicTesting) return;
     setIsMicTesting(true);
@@ -247,12 +363,13 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: false, // disabled: AGC amplifies echo
+          autoGainControl: false,
           channelCount: 1,
           sampleRate: 48000,
         },
         video: false,
       });
+      setMicPermission("granted");
     } catch (err: unknown) {
       setIsMicTesting(false);
       const error = err as DOMException;
@@ -260,6 +377,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         error.name === "NotAllowedError" ||
         error.name === "PermissionDeniedError"
       ) {
+        setMicPermission("denied");
         toast.error(
           "Microphone access was blocked. Please allow mic access in your browser settings.",
         );
@@ -302,6 +420,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       toast.error("Please log in to use voice chat");
       return;
     }
+    if (isInChannelRef.current) return; // prevent double-join
 
     let stream: MediaStream;
     try {
@@ -309,20 +428,22 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: false, // disabled: AGC amplifies echo
+          autoGainControl: false,
           channelCount: 1,
           sampleRate: 48000,
         },
         video: false,
       });
+      setMicPermission("granted");
     } catch (err: unknown) {
       const error = err as DOMException;
       if (
         error.name === "NotAllowedError" ||
         error.name === "PermissionDeniedError"
       ) {
+        setMicPermission("denied");
         toast.error(
-          "Microphone access was blocked. Click the lock icon in your browser's address bar and allow microphone access, then try again.",
+          "Microphone access was blocked. Tap the lock icon in your browser's address bar and allow microphone access, then try again.",
         );
       } else if (
         error.name === "NotFoundError" ||
@@ -364,7 +485,21 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     isInChannelRef.current = true;
     setIsInChannel(true);
     setParticipants(existingParticipants);
+    processedSignalIds.current.clear();
     toast.success("Joined voice channel!");
+
+    // Set MediaSession so audio plays in background / lock screen
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: "Wave Chat Voice",
+          artist: "Lobby",
+        });
+        navigator.mediaSession.playbackState = "playing";
+      }
+    } catch {
+      // ignore
+    }
 
     // Connect to existing participants as offerer
     for (const participant of existingParticipants) {
@@ -385,8 +520,10 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       }
     }
 
-    // Poll signals every 100ms — same speed as calls for real-time ICE exchange
-    signalPollInterval.current = setInterval(processSignals, 100);
+    // Use a ref-based interval so we always call the latest processSignals
+    signalPollInterval.current = setInterval(() => {
+      processSignalsRef.current();
+    }, 100);
 
     // Poll participants every 3s
     participantPollInterval.current = setInterval(async () => {
@@ -394,6 +531,27 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       try {
         const updated = await voiceActor.getVoiceParticipants(token);
         setParticipants(updated);
+
+        // Connect to any new participants we haven't seen
+        for (const p of updated) {
+          if (p.username === myUsername) continue;
+          if (!peerConnections.current.has(p.username)) {
+            try {
+              const pc = createPeerConnection(p.username);
+              addLocalTracks(pc);
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              await voiceActor.sendSignal(
+                token,
+                p.username,
+                "offer",
+                JSON.stringify(offer),
+              );
+            } catch {
+              // ignore
+            }
+          }
+        }
       } catch {
         // ignore
       }
@@ -404,7 +562,6 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     myUsername,
     createPeerConnection,
     addLocalTracks,
-    processSignals,
     startMicLevelMonitor,
     stopMicLevelMonitor,
   ]);
@@ -437,10 +594,19 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     }
     audioElements.current.clear();
     pendingIceCandidates.current.clear();
+    processedSignalIds.current.clear();
 
     setIsInChannel(false);
     setParticipants([]);
     setIsMicMuted(false);
+
+    try {
+      if (navigator.mediaSession) {
+        navigator.mediaSession.playbackState = "none";
+      }
+    } catch {
+      // ignore
+    }
 
     if (voiceActor && token) {
       try {
@@ -491,10 +657,12 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     participants,
     micLevel,
     isMicTesting,
+    micPermission,
     joinChannel,
     leaveChannel,
     toggleMic,
     toggleSpeaker,
     testMic,
+    requestMicPermission,
   };
 }

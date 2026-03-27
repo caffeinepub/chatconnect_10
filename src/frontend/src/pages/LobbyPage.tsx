@@ -16,6 +16,7 @@ import {
   MicOff,
   Radio,
   Send,
+  ShieldAlert,
   Users,
   Volume2,
   VolumeX,
@@ -65,7 +66,7 @@ export default function LobbyPage() {
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // "On Mic" / "Online" tab
+  // "On Air" / "Listeners" tab
   const [voiceTab, setVoiceTab] = useState<"mic" | "online">("mic");
 
   const { data: myProfile, isLoading: profileLoading } =
@@ -82,11 +83,13 @@ export default function LobbyPage() {
     participants: voiceParticipants,
     micLevel,
     isMicTesting,
+    micPermission,
     joinChannel,
     leaveChannel,
     toggleMic,
     toggleSpeaker,
     testMic,
+    requestMicPermission,
   } = useVoiceChat(localSession?.token ?? null, localSession?.username ?? null);
 
   // Local messages state
@@ -201,10 +204,26 @@ export default function LobbyPage() {
 
   const isSending = isLocalLoggedIn ? isSendingLocal : sendMessageII.isPending;
 
-  // Voice tab data
+  // Voice tab data — renamed labels
   const onMicUsers = voiceParticipants.filter((p) => p.isMicActive);
   const onlineVoiceUsers = voiceParticipants;
   const tabUsers = voiceTab === "mic" ? onMicUsers : onlineVoiceUsers;
+
+  // Handle Join Voice with permission check
+  const handleJoinVoice = async () => {
+    if (micPermission === "denied") {
+      toast.error(
+        "Microphone blocked. Tap the lock icon in your browser address bar and allow mic access.",
+      );
+      return;
+    }
+    if (micPermission === "prompt" || micPermission === "unknown") {
+      // Request permission first — browser will show native prompt
+      const granted = await requestMicPermission();
+      if (!granted) return;
+    }
+    await joinChannel();
+  };
 
   return (
     <TooltipProvider>
@@ -239,6 +258,36 @@ export default function LobbyPage() {
           </nav>
         </header>
 
+        {/* Mic Permission Banner */}
+        {micPermission === "denied" && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+            <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-800 flex-1">
+              Microphone blocked. To use voice chat, tap the lock icon in your
+              browser's address bar and allow mic access.
+            </p>
+          </div>
+        )}
+
+        {/* Mic Permission Prompt Banner (not yet asked) */}
+        {(micPermission === "prompt" || micPermission === "unknown") &&
+          !isInChannel && (
+            <div className="bg-violet-50 border-b border-violet-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+              <Mic className="h-4 w-4 text-violet-600 flex-shrink-0" />
+              <p className="text-xs text-violet-800 flex-1">
+                Tap <strong>Join Voice</strong> to enable mic and join the voice
+                channel.
+              </p>
+              <button
+                type="button"
+                onClick={handleJoinVoice}
+                className="text-xs font-semibold text-violet-700 bg-violet-100 hover:bg-violet-200 px-3 py-1 rounded-full transition-colors flex-shrink-0"
+              >
+                Allow Mic
+              </button>
+            </div>
+          )}
+
         {/* Voice Status Strip — only on Lobby page, two tabs */}
         <div className="bg-white border-b border-border flex-shrink-0">
           {/* Tab bar */}
@@ -253,8 +302,8 @@ export default function LobbyPage() {
               }`}
               data-ocid="lobby.tab"
             >
-              <Mic className="h-3 w-3" />
-              On Mic
+              <Radio className="h-3 w-3" />
+              On Air
               {onMicUsers.length > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">
                   {onMicUsers.length}
@@ -272,7 +321,7 @@ export default function LobbyPage() {
               data-ocid="lobby.tab"
             >
               <Users className="h-3 w-3" />
-              In Voice
+              Listeners
               {onlineVoiceUsers.length > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold">
                   {onlineVoiceUsers.length}
@@ -288,8 +337,8 @@ export default function LobbyPage() {
             {tabUsers.length === 0 ? (
               <span className="text-xs text-muted-foreground">
                 {voiceTab === "mic"
-                  ? "No one on mic right now"
-                  : "No one in voice channel"}
+                  ? "No one on air right now"
+                  : "No listeners yet"}
               </span>
             ) : (
               tabUsers.map((p) => (
@@ -507,10 +556,13 @@ export default function LobbyPage() {
                 {!isInChannel ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
-                      onClick={joinChannel}
+                      onClick={handleJoinVoice}
                       className="rounded-full h-9 px-4 gap-2 text-sm font-medium text-white flex-shrink-0"
                       style={{
-                        background: "linear-gradient(135deg, #7C3AED, #22C7B7)",
+                        background:
+                          micPermission === "denied"
+                            ? "linear-gradient(135deg, #9ca3af, #6b7280)"
+                            : "linear-gradient(135deg, #7C3AED, #22C7B7)",
                       }}
                       data-ocid="voice.primary_button"
                     >
@@ -602,7 +654,7 @@ export default function LobbyPage() {
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        {isMicMuted ? "Unmute Mic" : "Mute Mic (Hold to Talk)"}
+                        {isMicMuted ? "Unmute Mic" : "Mute Mic"}
                       </TooltipContent>
                     </Tooltip>
 
@@ -647,7 +699,7 @@ export default function LobbyPage() {
                 {isInChannel && (
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                    {voiceParticipants.length} in voice
+                    {voiceParticipants.length} listening
                   </span>
                 )}
               </div>

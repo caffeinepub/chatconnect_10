@@ -52,6 +52,36 @@
     --radius: 0.5rem;
   }
 
+  .dark {
+    --background: 0.16 0.02 265;
+    --foreground: 0.94 0.008 260;
+
+    --card: 0.2 0.025 265;
+    --card-foreground: 0.94 0.008 260;
+
+    --popover: 0.2 0.025 265;
+    --popover-foreground: 0.94 0.008 260;
+
+    --primary: 0.65 0.22 290;
+    --primary-foreground: 0.16 0.02 265;
+
+    --secondary: 0.25 0.02 265;
+    --secondary-foreground: 0.94 0.008 260;
+
+    --muted: 0.25 0.02 265;
+    --muted-foreground: 0.6 0.02 260;
+
+    --accent: 0.25 0.02 265;
+    --accent-foreground: 0.94 0.008 260;
+
+    --destructive: 0.55 0.22 25;
+    --destructive-foreground: 1 0 0;
+
+    --border: 0.28 0.02 265;
+    --input: 0.28 0.02 265;
+    --ring: 0.65 0.22 290;
+  }
+
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;

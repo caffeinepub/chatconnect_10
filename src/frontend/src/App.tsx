@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { ServerStatusBanner } from "./components/ServerStatusBanner";
 import CallScreen from "./pages/CallScreen";
 import CallingCardsPage from "./pages/CallingCardsPage";
@@ -12,6 +13,12 @@ import MessagesPage from "./pages/MessagesPage";
 import MyProfilePage from "./pages/MyProfilePage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 import SignupPage from "./pages/SignupPage";
+
+// Init dark mode from localStorage before first render
+const savedDarkMode = localStorage.getItem("wavechat_darkmode");
+if (savedDarkMode === "true") {
+  document.documentElement.classList.add("dark");
+}
 
 const rootRoute = createRootRoute();
 
@@ -97,6 +104,16 @@ declare module "@tanstack/react-router" {
 }
 
 export default function App() {
+  // Sync dark mode class on mount (handles SSR/hydration edge cases)
+  useEffect(() => {
+    const saved = localStorage.getItem("wavechat_darkmode");
+    if (saved === "true") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, []);
+
   return (
     <>
       <ServerStatusBanner />

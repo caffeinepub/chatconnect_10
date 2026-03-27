@@ -175,6 +175,7 @@ function LocalCallingCard({
   const [followingCount, setFollowingCount] = useState<number | null>(null);
   const [userBio, setUserBio] = useState<string>("");
   const [isVerified, setIsVerified] = useState(false);
+  const [userStatus, setUserStatus] = useState<string>("");
   const isWildfireAdmin = user.username === "WILDFIRE";
 
   // Load initial follow/block state and follower counts
@@ -202,17 +203,25 @@ function LocalCallingCard({
     });
   }, [extActor, token, user.username, isMe]);
 
-  // Load bio + verified status
+  // Load bio + verified status + custom status
   useEffect(() => {
     if (!extActor) return;
     Promise.all([
       extActor.getUserBio(user.username).catch(() => ""),
       extActor.isUserVerified(user.username).catch(() => false),
-    ]).then(([b, v]) => {
+      extActor.getUserStatus(user.username).catch(() => ""),
+    ]).then(([b, v, s]) => {
       setUserBio(b ?? "");
       setIsVerified(v);
+      setUserStatus(s ?? "");
     });
   }, [extActor, user.username]);
+
+  // Record profile visit (fire-and-forget)
+  useEffect(() => {
+    if (!extActor || !token || isMe) return;
+    extActor.recordProfileVisit(token, user.username).catch(() => {});
+  }, [extActor, token, user.username, isMe]);
 
   const handleFollow = async () => {
     if (!extActor || !token) return;
@@ -314,6 +323,24 @@ function LocalCallingCard({
         </div>
         <p className="text-white/60 text-sm mb-1">Age {user.age.toString()}</p>
         <p className="text-white/40 text-xs mb-2">@{user.username}</p>
+        {userStatus && userStatus !== "" && (
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                userStatus === "Available for calls"
+                  ? "bg-green-400"
+                  : userStatus === "Busy"
+                    ? "bg-red-400"
+                    : userStatus === "Away"
+                      ? "bg-yellow-400"
+                      : userStatus === "Do Not Disturb"
+                        ? "bg-gray-400"
+                        : "bg-gray-400"
+              }`}
+            />
+            <span className="text-white/50 text-xs">{userStatus}</span>
+          </div>
+        )}
         {userBio && (
           <p className="text-white/60 text-xs mb-2 leading-relaxed line-clamp-2">
             {userBio}
