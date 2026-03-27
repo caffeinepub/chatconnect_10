@@ -291,6 +291,8 @@ export interface backendInterface {
     logoutLocalAccount(token: SessionToken): Promise<void>;
     markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
+    setTypingStatus(token: SessionToken, recipientUsername: string, isTyping: boolean): Promise<void>;
+    getTypingStatus(token: SessionToken, otherUsername: string): Promise<boolean>;
     markNotificationReadAsLocal(token: SessionToken, id: bigint): Promise<void>;
     registerLocalAccount(username: string, passwordHash: string, displayName: string, age: bigint, photo: ExternalBlob | null): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
@@ -1337,6 +1339,35 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.markDirectMessagesRead(arg0, arg1);
+            return result;
+        }
+    }
+
+    async setTypingStatus(arg0: SessionToken, arg1: string, arg2: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setTypingStatus(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setTypingStatus(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async getTypingStatus(arg0: SessionToken, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTypingStatus(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTypingStatus(arg0, arg1);
             return result;
         }
     }

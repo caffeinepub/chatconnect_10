@@ -3,7 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Inbox, Loader2, LogOut, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  Inbox,
+  Loader2,
+  LogOut,
+  Send,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -53,7 +61,9 @@ export default function MessagesPage() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingConvos, setIsLoadingConvos] = useState(true);
   const [isMobileThread, setIsMobileThread] = useState(false);
+  const [isTyping, setIsTyping] = useState(false); // other user is typing
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -126,10 +136,46 @@ export default function MessagesPage() {
       .catch(() => {});
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
 
+  // Poll typing status
+  useEffect(() => {
+    if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
+    const pollTyping = async () => {
+      try {
+        const typing = await extActor.getTypingStatus(
+          localSession.token,
+          selectedUser,
+        );
+        setIsTyping(typing);
+      } catch {
+        // ignore
+      }
+    };
+    pollTyping();
+    const interval = setInterval(pollTyping, 2_000);
+    return () => clearInterval(interval);
+  }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
+
+  const handleInputChange = (value: string) => {
+    setMessageText(value);
+    if (!selectedUser || !localSession || !extActor) return;
+    // Send typing start
+    extActor
+      .setTypingStatus(localSession.token, selectedUser, true)
+      .catch(() => {});
+    // Clear after 4 seconds of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      extActor
+        .setTypingStatus(localSession.token, selectedUser, false)
+        .catch(() => {});
+    }, 4_000);
+  };
+
   const handleSelectUser = (username: string) => {
     setSelectedUser(username);
     setIsMobileThread(true);
     setMessages([]);
+    setIsTyping(false);
   };
 
   const handleSend = async () => {
@@ -137,6 +183,11 @@ export default function MessagesPage() {
       return;
     const text = messageText.trim();
     setMessageText("");
+    // Stop typing indicator
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    extActor
+      .setTypingStatus(localSession.token, selectedUser, false)
+      .catch(() => {});
     const optimistic: DirectMessage = {
       id: BigInt(Date.now()),
       senderUsername: localSession.username,
@@ -198,7 +249,7 @@ export default function MessagesPage() {
         </nav>
       </header>
 
-      {/* Main two-panel layout — fills remaining height */}
+      {/* Main two-panel layout */}
       <div className="flex flex-1 overflow-hidden gap-3 p-3">
         {/* Conversation List */}
         <motion.div
@@ -236,47 +287,59 @@ export default function MessagesPage() {
                 </p>
               </div>
             ) : (
-              conversations.map((convo, idx) => (
-                <button
-                  key={convo.otherUsername}
-                  type="button"
-                  onClick={() => handleSelectUser(convo.otherUsername)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors text-left ${
-                    selectedUser === convo.otherUsername ? "bg-primary/5" : ""
-                  }`}
-                  data-ocid={`messages.item.${idx + 1}`}
-                >
-                  <Avatar className="h-10 w-10 flex-shrink-0">
-                    <AvatarFallback
-                      className={`bg-gradient-to-br ${getGradient(convo.otherUsername)} text-white text-sm font-semibold`}
-                    >
-                      {(convo.otherDisplayName || convo.otherUsername)
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-sm truncate">
-                        {convo.otherDisplayName || convo.otherUsername}
-                      </span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {relativeTime(convo.lastTimestamp)}
-                      </span>
+              conversations.map((convo, idx) => {
+                const isSentByMe =
+                  convo.lastMessageSender === localSession?.username;
+                return (
+                  <button
+                    key={convo.otherUsername}
+                    type="button"
+                    onClick={() => handleSelectUser(convo.otherUsername)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors text-left ${
+                      selectedUser === convo.otherUsername ? "bg-primary/5" : ""
+                    }`}
+                    data-ocid={`messages.item.${idx + 1}`}
+                  >
+                    <Avatar className="h-10 w-10 flex-shrink-0">
+                      <AvatarFallback
+                        className={`bg-gradient-to-br ${getGradient(convo.otherUsername)} text-white text-sm font-semibold`}
+                      >
+                        {(convo.otherDisplayName || convo.otherUsername)
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm truncate">
+                          {convo.otherDisplayName || convo.otherUsername}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          {relativeTime(convo.lastTimestamp)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {isSentByMe &&
+                          (convo.lastMessageIsRead ? (
+                            <CheckCheck className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                          ) : (
+                            <Check className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          ))}
+                        <p className="text-xs text-muted-foreground truncate">
+                          {convo.lastMessage}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {convo.lastMessage}
-                    </p>
-                  </div>
-                  {Number(convo.unreadCount) > 0 && (
-                    <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary text-white text-[10px] font-semibold flex items-center justify-center">
-                      {Number(convo.unreadCount) > 9
-                        ? "9+"
-                        : Number(convo.unreadCount)}
-                    </span>
-                  )}
-                </button>
-              ))
+                    {Number(convo.unreadCount) > 0 && (
+                      <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary text-white text-[10px] font-semibold flex items-center justify-center">
+                        {Number(convo.unreadCount) > 9
+                          ? "9+"
+                          : Number(convo.unreadCount)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
         </motion.div>
@@ -320,11 +383,17 @@ export default function MessagesPage() {
                     {selectedDisplayName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="flex-1">
                   <p className="font-semibold text-sm">{selectedDisplayName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    @{selectedUser}
-                  </p>
+                  {isTyping ? (
+                    <p className="text-xs text-primary animate-pulse">
+                      typing...
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      @{selectedUser}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -342,6 +411,7 @@ export default function MessagesPage() {
                     messages.map((msg, idx) => {
                       const isMe =
                         msg.senderUsername === localSession?.username;
+                      const isLast = idx === messages.length - 1;
                       return (
                         <motion.div
                           key={msg.id.toString()}
@@ -368,13 +438,28 @@ export default function MessagesPage() {
                             <p className="text-sm leading-relaxed">
                               {msg.text}
                             </p>
-                            <p
-                              className={`text-[10px] mt-1 ${
-                                isMe ? "text-white/60" : "text-muted-foreground"
+                            <div
+                              className={`flex items-center gap-1 mt-1 ${
+                                isMe ? "justify-end" : "justify-start"
                               }`}
                             >
-                              {relativeTime(msg.timestamp)}
-                            </p>
+                              <p
+                                className={`text-[10px] ${
+                                  isMe
+                                    ? "text-white/60"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {relativeTime(msg.timestamp)}
+                              </p>
+                              {isMe &&
+                                isLast &&
+                                (msg.isRead ? (
+                                  <CheckCheck className="h-3 w-3 text-blue-300" />
+                                ) : (
+                                  <Check className="h-3 w-3 text-white/60" />
+                                ))}
+                            </div>
                           </div>
                         </motion.div>
                       );
@@ -388,7 +473,7 @@ export default function MessagesPage() {
               <div className="px-4 py-3 border-t border-border flex items-center gap-2 flex-shrink-0">
                 <Input
                   value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

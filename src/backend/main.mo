@@ -35,6 +35,7 @@ actor {
   var nextSignalId : Nat = 0;
   var nextNotificationId : Nat = 0;
   var nextDmId : Nat = 0;
+  let typingStatus = Map.empty<Text, Time.Time>(); // key: "sender_recipient"
 
   type Message = {
     id : Nat;
@@ -146,6 +147,8 @@ actor {
     lastMessage : Text;
     lastTimestamp : Time.Time;
     unreadCount : Nat;
+    lastMessageSender : Text;
+    lastMessageIsRead : Bool;
   };
 
   type ProfileSettings = {
@@ -606,7 +609,7 @@ actor {
         dm.senderUsername == username or dm.recipientUsername == username
       }
     );
-    let convMap = Map.empty<Text, (Text, Time.Time, Nat)>();
+    let convMap = Map.empty<Text, (Text, Time.Time, Nat, Text, Bool)>();
     for (dm in myDms.values()) {
       let other = if (dm.senderUsername == username) { dm.recipientUsername } else { dm.senderUsername };
       // Skip blocked users
@@ -616,23 +619,26 @@ actor {
         let unreadIncrement = if (dm.recipientUsername == username and not dm.isRead) { 1 } else { 0 };
         switch (convMap.get(other)) {
           case (null) {
-            convMap.add(other, (dm.text, dm.timestamp, unreadIncrement));
+            convMap.add(other, (dm.text, dm.timestamp, unreadIncrement, dm.senderUsername, dm.isRead));
           };
-          case (?(lastMsg, lastTs, unread)) {
-            let newTs = if (dm.timestamp > lastTs) { dm.timestamp } else { lastTs };
-            let newMsg = if (dm.timestamp > lastTs) { dm.text } else { lastMsg };
-            convMap.add(other, (newMsg, newTs, unread + unreadIncrement));
+          case (?(lastMsg, lastTs, unread, lastSender, lastRead)) {
+            let isNewer = dm.timestamp > lastTs;
+            let newTs = if (isNewer) { dm.timestamp } else { lastTs };
+            let newMsg = if (isNewer) { dm.text } else { lastMsg };
+            let newSender = if (isNewer) { dm.senderUsername } else { lastSender };
+            let newRead = if (isNewer) { dm.isRead } else { lastRead };
+            convMap.add(other, (newMsg, newTs, unread + unreadIncrement, newSender, newRead));
           };
         };
       };
     };
     convMap.entries().toArray().map(
-      func((other, (lastMsg, lastTs, unread)) : (Text, (Text, Time.Time, Nat))) : ConversationSummary {
+      func((other, (lastMsg, lastTs, unread, lastSender, lastRead)) : (Text, (Text, Time.Time, Nat, Text, Bool))) : ConversationSummary {
         let displayName = switch (localUsers.get(other)) {
           case (?u) { u.displayName };
           case (null) { other };
         };
-        { otherUsername = other; otherDisplayName = displayName; lastMessage = lastMsg; lastTimestamp = lastTs; unreadCount = unread };
+        { otherUsername = other; otherDisplayName = displayName; lastMessage = lastMsg; lastTimestamp = lastTs; unreadCount = unread; lastMessageSender = lastSender; lastMessageIsRead = lastRead };
       }
     );
   };

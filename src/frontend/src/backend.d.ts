@@ -110,6 +110,8 @@ export interface ConversationSummary {
     unreadCount: bigint;
     lastTimestamp: Time;
     otherDisplayName: string;
+    lastMessageSender: string;
+    lastMessageIsRead: boolean;
 }
 export interface UserProfile {
     fname: string;
@@ -198,6 +200,8 @@ export interface backendInterface {
     logoutLocalAccount(token: SessionToken): Promise<void>;
     markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
+    setTypingStatus(token: SessionToken, recipientUsername: string, isTyping: boolean): Promise<void>;
+    getTypingStatus(token: SessionToken, otherUsername: string): Promise<boolean>;
     markNotificationReadAsLocal(token: SessionToken, id: bigint): Promise<void>;
     registerLocalAccount(username: string, passwordHash: string, displayName: string, age: bigint, photo: ExternalBlob | null): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
