@@ -223,4 +223,19 @@ export interface backendInterface {
     pingOnline(token: SessionToken): Promise<void>;
     getOnlineUsernames(): Promise<Array<string>>;
     verifyUser(): Promise<void>;
+    checkIsWildfireAdmin(token: SessionToken): Promise<boolean>;
+    isUserVerified(username: string): Promise<boolean>;
+    isUserBanned(username: string): Promise<boolean>;
+    grantVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
+    revokeVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
+    banLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
+    unbanLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
+    getAllUsersForAdmin(token: SessionToken): Promise<Array<AdminUserInfo>>;
+}
+
+export interface AdminUserInfo {
+    username: string;
+    displayName: string;
+    isVerified: boolean;
+    isBanned: boolean;
 }

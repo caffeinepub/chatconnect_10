@@ -3,6 +3,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  Crown,
   Loader2,
   LogOut,
   MessageCircle,
@@ -173,6 +174,8 @@ function LocalCallingCard({
   const [followersCount, setFollowersCount] = useState<number | null>(null);
   const [followingCount, setFollowingCount] = useState<number | null>(null);
   const [userBio, setUserBio] = useState<string>("");
+  const [isVerified, setIsVerified] = useState(false);
+  const isWildfireAdmin = user.username === "WILDFIRE";
 
   // Load initial follow/block state and follower counts
   useEffect(() => {
@@ -199,13 +202,16 @@ function LocalCallingCard({
     });
   }, [extActor, token, user.username, isMe]);
 
-  // Load bio
+  // Load bio + verified status
   useEffect(() => {
     if (!extActor) return;
-    extActor
-      .getUserBio(user.username)
-      .then((b) => setUserBio(b ?? ""))
-      .catch(() => {});
+    Promise.all([
+      extActor.getUserBio(user.username).catch(() => ""),
+      extActor.isUserVerified(user.username).catch(() => false),
+    ]).then(([b, v]) => {
+      setUserBio(b ?? "");
+      setIsVerified(v);
+    });
   }, [extActor, user.username]);
 
   const handleFollow = async () => {
@@ -276,9 +282,36 @@ function LocalCallingCard({
           )}
         </div>
 
-        <h3 className="font-display font-semibold text-lg mb-1">
-          {user.displayName}
-        </h3>
+        <div className="flex items-center gap-1.5 justify-center mb-1">
+          <h3 className="font-display font-semibold text-lg">
+            {user.displayName}
+          </h3>
+          {isVerified && (
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 flex-shrink-0 shadow-sm shadow-blue-500/50">
+              <svg
+                role="img"
+                aria-label="verified"
+                viewBox="0 0 12 12"
+                className="w-3 h-3"
+              >
+                <polyline
+                  points="2,6 5,9 10,3"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          )}
+          {isWildfireAdmin && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-bold border border-amber-400/30">
+              <Crown className="h-2.5 w-2.5" />
+              Admin
+            </span>
+          )}
+        </div>
         <p className="text-white/60 text-sm mb-1">Age {user.age.toString()}</p>
         <p className="text-white/40 text-xs mb-2">@{user.username}</p>
         {userBio && (

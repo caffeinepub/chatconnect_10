@@ -1662,6 +1662,42 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+
+    async checkIsWildfireAdmin(arg0: bigint): Promise<boolean> {
+        const result = await this.actor.checkIsWildfireAdmin(arg0);
+        return result;
+    }
+
+    async isUserVerified(arg0: string): Promise<boolean> {
+        const result = await this.actor.isUserVerified(arg0);
+        return result;
+    }
+
+    async isUserBanned(arg0: string): Promise<boolean> {
+        const result = await this.actor.isUserBanned(arg0);
+        return result;
+    }
+
+    async grantVerifiedBadge(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.grantVerifiedBadge(arg0, arg1);
+    }
+
+    async revokeVerifiedBadge(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.revokeVerifiedBadge(arg0, arg1);
+    }
+
+    async banLocalUser(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.banLocalUser(arg0, arg1);
+    }
+
+    async unbanLocalUser(arg0: bigint, arg1: string): Promise<void> {
+        await this.actor.unbanLocalUser(arg0, arg1);
+    }
+
+    async getAllUsersForAdmin(arg0: bigint): Promise<Array<{username: string; displayName: string; isVerified: boolean; isBanned: boolean}>> {
+        const result = await this.actor.getAllUsersForAdmin(arg0);
+        return result as any;
+    }
 }
 function from_candid_CallRequestWithStatus_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CallRequestWithStatus): CallRequestWithStatus {
     return from_candid_record_n12(_uploadFile, _downloadFile, value);

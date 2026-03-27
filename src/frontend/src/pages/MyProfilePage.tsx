@@ -14,11 +14,13 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   Camera,
   ChevronRight,
+  Crown,
   Headphones,
   LogOut,
   Pencil,
   Save,
   Settings,
+  Shield,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -28,6 +30,7 @@ import type {
   backendInterface as ExtendedBackend,
   LocalUser,
 } from "../backend.d";
+import { AdminPanel } from "../components/AdminPanel";
 import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
 import { useActor } from "../hooks/useActor";
@@ -55,6 +58,10 @@ export default function MyProfilePage() {
   // Followers / Following
   const [followers, setFollowers] = useState<string[]>([]);
   const [following, setFollowing] = useState<string[]>([]);
+
+  // Admin panel
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const isAdmin = localSession?.username === "WILDFIRE";
 
   // Settings dialog
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -392,9 +399,17 @@ export default function MyProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-foreground">
-                    {displayName}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-foreground">
+                      {displayName}
+                    </h2>
+                    {isAdmin && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-bold shadow-md shadow-amber-400/30">
+                        <Crown className="h-3 w-3" />
+                        Admin
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">@{username}</p>
                   {age !== null && (
                     <p className="text-sm text-muted-foreground">
@@ -462,6 +477,25 @@ export default function MyProfilePage() {
         </div>
       </main>
 
+      {/* Admin Panel — WILDFIRE only */}
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={() => setAdminPanelOpen(true)}
+          className="mt-4 flex items-center gap-3 w-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl shadow-lg shadow-amber-500/30 px-5 py-4 hover:shadow-xl hover:shadow-amber-500/40 transition-all group"
+          data-ocid="admin.open_modal_button"
+        >
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Shield className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="font-bold text-sm text-white">Admin Panel</p>
+            <p className="text-xs text-white/70">Manage members &amp; badges</p>
+          </div>
+          <Crown className="h-5 w-5 text-white/80 group-hover:text-white transition-colors" />
+        </button>
+      )}
+
       <footer className="text-center py-4 text-xs text-muted-foreground border-t border-border">
         © {new Date().getFullYear()}. Built with ❤️ using{" "}
         <a
@@ -474,6 +508,16 @@ export default function MyProfilePage() {
         </a>
       </footer>
       <BottomNav />
+
+      {/* Admin Panel */}
+      {isAdmin && localSession && (
+        <AdminPanel
+          open={adminPanelOpen}
+          onClose={() => setAdminPanelOpen(false)}
+          extActor={extActor}
+          token={localSession.token}
+        />
+      )}
 
       {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

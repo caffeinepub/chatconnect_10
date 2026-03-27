@@ -28,6 +28,8 @@ actor {
   let comments = Map.empty<Nat, Comment>();
   let notifications = Map.empty<Nat, Notification>();
   let directMessages = Map.empty<Nat, DirectMessage>();
+  let verifiedUsers = Set.empty<Text>();
+  let bannedUsers = Set.empty<Text>();
   var nextId = 0;
   var nextTokenId : Nat = 1;
   var nextSignalId : Nat = 0;
@@ -1468,6 +1470,9 @@ actor {
     };
     if (localUser.passwordHash != passwordHash) {
       Runtime.trap("Invalid username or password");
+    if (bannedUsers.contains(username)) {
+      Runtime.trap("Your account has been banned by an admin");
+    };
     };
     let token = nextTokenId;
     nextTokenId += 1;
@@ -1654,7 +1659,92 @@ actor {
     users.size();
   };
 
-  public func verifyUser() : async () { Runtime.trap("Not implemented") };
+  // ---- Admin Features (WILDFIRE only) ----
+
+  func isWildfireToken(token : SessionToken) : Bool {
+    switch (validateToken(token)) {
+      case (?username) { username == "WILDFIRE" };
+      case (null) { false };
+    };
+  };
+
+  public query func checkIsWildfireAdmin(token : SessionToken) : async Bool {
+    isWildfireToken(token);
+  };
+
+  public query func isUserVerified(username : Text) : async Bool {
+    verifiedUsers.contains(username);
+  };
+
+  public query func isUserBanned(username : Text) : async Bool {
+    bannedUsers.contains(username);
+  };
+
+  public shared func grantVerifiedBadge(token : SessionToken, targetUsername : Text) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can grant verified badges");
+    };
+    if (not localUsers.containsKey(targetUsername)) {
+      Runtime.trap("User not found");
+    };
+    verifiedUsers.add(targetUsername);
+  };
+
+  public shared func revokeVerifiedBadge(token : SessionToken, targetUsername : Text) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can revoke verified badges");
+    };
+    verifiedUsers.remove(targetUsername);
+  };
+
+  public shared func banLocalUser(token : SessionToken, targetUsername : Text) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can ban users");
+    };
+    if (targetUsername == "WILDFIRE") {
+      Runtime.trap("Cannot ban the admin account");
+    };
+    if (not localUsers.containsKey(targetUsername)) {
+      Runtime.trap("User not found");
+    };
+    bannedUsers.add(targetUsername);
+    // Invalidate all sessions for this user
+    for ((t, u) in sessions.entries().toArray().values()) {
+      if (u == targetUsername) { sessions.remove(t) };
+    };
+  };
+
+  public shared func unbanLocalUser(token : SessionToken, targetUsername : Text) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can unban users");
+    };
+    bannedUsers.remove(targetUsername);
+  };
+
+  public type AdminUserInfo = {
+    username : Text;
+    displayName : Text;
+    isVerified : Bool;
+    isBanned : Bool;
+  };
+
+  public query func getAllUsersForAdmin(token : SessionToken) : async [AdminUserInfo] {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can view all user data");
+    };
+    localUsers.entries().toArray().map(
+      func((username, user) : (Text, LocalUser)) : AdminUserInfo {
+        {
+          username;
+          displayName = user.displayName;
+          isVerified = verifiedUsers.contains(username);
+          isBanned = bannedUsers.contains(username);
+        };
+      }
+    );
+  };
+
+  public func verifyUser() : async () { Runtime.trap("Deprecated: use grantVerifiedBadge") };
 
   public type UserProfile = {
     name : Text;

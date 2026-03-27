@@ -1,29 +1,45 @@
-# Wave Chat
+# Wave Chat - Admin Features
 
 ## Current State
-Full-stack social/voice chat app with bottom nav, calling cards grid, lobby chatroom, call screen with WebRTC, and profile page.
+The app has a placeholder `verifyUser()` backend method that does nothing. There is no verified badge shown in the UI, no ban functionality, and no admin panel. The WILDFIRE username is intended to be the admin account but has no special powers beyond a note in the profile page.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Lobby: horizontal strip at the top of the chat area showing users currently on mic (from voiceParticipants) with their username/display name
-- CallScreen: 5-second "call about to start" countdown animation during the connecting phase (before isConnected becomes true), shown in a visually distinct way (large pulsing countdown)
+- Backend: `grantVerifiedBadge(token, targetUsername)` - admin-only, marks a user as verified
+- Backend: `revokeVerifiedBadge(token, targetUsername)` - admin-only, removes verified badge
+- Backend: `banLocalUser(token, targetUsername)` - admin-only, bans a user (prevents login)
+- Backend: `unbanLocalUser(token, targetUsername)` - admin-only, lifts a ban
+- Backend: `isUserVerified(username)` - public query, returns bool
+- Backend: `getAllUsersForAdmin(token)` - admin-only, returns list of all local users with verified/banned status
+- Backend: `checkIsWildfireAdmin(token)` - returns bool, true only if token belongs to username WILDFIRE
+- Backend: login check rejects banned users with error message "Your account has been banned"
+- Backend: LocalUser type extended with `isVerified: Bool` and `isBanned: Bool` fields
+- Frontend: AdminPanel component - modal/page shown only when logged in as WILDFIRE, lists all users with toggle verified and ban/unban buttons
+- Frontend: Verified badge (blue checkmark) shown next to display name on Calling Cards and Profile views
+- Frontend: Admin crown/shield badge shown next to WILDFIRE's name everywhere
+- Frontend: "Admin Panel" button shown in Profile page only for WILDFIRE
 
 ### Modify
-- CallingCardsPage: change cards layout from a grid to a horizontal one-at-a-time carousel (snap scroll or prev/next navigation) so cards appear one by one horizontally
-- CallingCardsPage: remove the "Back to Lobby" button from the page header
-- BottomNav: remove the "Contact Developer / Dev" button entirely from the bottom nav bar
-- MyProfilePage: the contact developer link (srklimon3@gmail.com) is already in the profile page footer area — make it a more prominent styled button/card under the profile card
-- LobbyPage: adjust the message input area to have more bottom padding (pb-24 or similar) so it is not hidden behind the BottomNav; move the form slightly upward
-- CallScreen: 20-minute timer should only START counting down after `isConnected === true` — reset/hold at CALL_DURATION until connected; stop showing timer during connecting phase
+- Backend: `loginLocalAccount` - reject if user is banned
+- Backend: `LocalUser` record - add `isVerified` and `isBanned` boolean fields
+- Backend: `registerLocalAccount` - initialize `isVerified = false`, `isBanned = false`
+- Frontend: MyProfilePage - show "Admin Panel" button only when username === "WILDFIRE"
+- Frontend: CallingCardsPage - show verified badge next to verified users' names
 
 ### Remove
-- BottomNav: Dev/Contact Developer button
-- CallingCardsPage: "Back to Lobby" ArrowLeft button
+- Backend: old placeholder `verifyUser()` method (replace with real implementation)
 
 ## Implementation Plan
-1. BottomNav.tsx: remove the Contact Developer button (last button in the nav)
-2. CallingCardsPage.tsx: remove ArrowLeft/Back to Lobby link; replace the grid layout with a horizontal carousel (use snap-x scroll with one card per snap point, add prev/next arrow buttons)
-3. LobbyPage.tsx: add a horizontal "On Mic" user strip above the ScrollArea for chat messages (shows voiceParticipants usernames with mic icon); add pb-24 to bottom input area so it clears the nav bar
-4. MyProfilePage.tsx: make the contact developer section a proper styled card/button below the profile card
-5. CallScreen.tsx: hold timer at CALL_DURATION until isConnected; add 5-second animated countdown (5→4→3→2→1→"Starting!") that plays during the connecting phase before connection is established
+1. Extend `LocalUser` type in Motoko with `isVerified: Bool` and `isBanned: Bool`
+2. Add `verifiedUsers` and `bannedUsers` sets in backend state
+3. Implement `grantVerifiedBadge`, `revokeVerifiedBadge`, `banLocalUser`, `unbanLocalUser` with WILDFIRE-only auth check
+4. Implement `isUserVerified(username)` public query
+5. Implement `getAllUsersForAdmin(token)` returning extended user data
+6. Implement `checkIsWildfireAdmin(token)` helper
+7. Patch `loginLocalAccount` to reject banned users
+8. Regenerate backend.d.ts with new method signatures
+9. Build AdminPanel React component with user list, verify toggles, ban toggles
+10. Show verified blue checkmark badge on CallingCardsPage and profile views
+11. Show WILDFIRE crown/shield admin badge on profile and calling cards
+12. Add "Admin Panel" button to MyProfilePage visible only to WILDFIRE
