@@ -1,4 +1,11 @@
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -176,6 +183,10 @@ function LocalCallingCard({
   const [userBio, setUserBio] = useState<string>("");
   const [isVerified, setIsVerified] = useState(false);
   const [userStatus, setUserStatus] = useState<string>("");
+  const [callTopic, setCallTopic] = useState<string>("");
+  const [editTopicOpen, setEditTopicOpen] = useState(false);
+  const [topicInput, setTopicInput] = useState("");
+  const [savingTopic, setSavingTopic] = useState(false);
   const isWildfireAdmin = user.username === "WILDFIRE";
 
   // Load initial follow/block state and follower counts
@@ -210,10 +221,12 @@ function LocalCallingCard({
       extActor.getUserBio(user.username).catch(() => ""),
       extActor.isUserVerified(user.username).catch(() => false),
       extActor.getUserStatus(user.username).catch(() => ""),
-    ]).then(([b, v, s]) => {
+      extActor.getCallTopic(user.username).catch(() => null),
+    ]).then(([b, v, s, t]) => {
       setUserBio(b ?? "");
       setIsVerified(v);
       setUserStatus(s ?? "");
+      setCallTopic(t ?? "");
     });
   }, [extActor, user.username]);
 
@@ -346,6 +359,27 @@ function LocalCallingCard({
             {userBio}
           </p>
         )}
+        {callTopic && (
+          <div className="flex items-center gap-1.5 mb-2 bg-white/10 rounded-full px-3 py-1">
+            <span className="text-xs">&#x1F4AC;</span>
+            <span className="text-white/80 text-xs italic leading-snug line-clamp-1">
+              {callTopic}
+            </span>
+          </div>
+        )}
+        {isMe && (
+          <button
+            type="button"
+            onClick={() => {
+              setTopicInput(callTopic);
+              setEditTopicOpen(true);
+            }}
+            className="text-xs text-white/50 hover:text-white/80 underline mb-2 transition-colors"
+            data-ocid={`cards.edit_button.${index + 1}`}
+          >
+            {callTopic ? "Edit Topic" : "+ Add Call Topic"}
+          </button>
+        )}
 
         {/* Followers / Following counts */}
         {!isMe && (followersCount !== null || followingCount !== null) && (
@@ -471,6 +505,90 @@ function LocalCallingCard({
           </button>
         </div>
       </div>
+      {isMe && (
+        <Dialog open={editTopicOpen} onOpenChange={setEditTopicOpen}>
+          <DialogContent data-ocid="cards.dialog">
+            <DialogHeader>
+              <DialogTitle>Edit Call Topic</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  "What's on your mind?",
+                  "Share a childhood memory",
+                  "Sing a song for me",
+                  "How's life?",
+                  "Tell me something fun",
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setTopicInput(preset)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${topicInput === preset ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
+                    data-ocid="cards.toggle"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <Input
+                placeholder="Or type a custom topic..."
+                value={topicInput}
+                onChange={(e) => setTopicInput(e.target.value)}
+                className="rounded-xl"
+                data-ocid="cards.input"
+              />
+            </div>
+            <div className="flex justify-between pt-2">
+              {callTopic && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={async () => {
+                    if (!extActor || !token) return;
+                    setSavingTopic(true);
+                    try {
+                      await extActor.clearCallTopic(token);
+                      setCallTopic("");
+                      setEditTopicOpen(false);
+                    } catch {}
+                    setSavingTopic(false);
+                  }}
+                  data-ocid="cards.delete_button"
+                >
+                  Clear
+                </Button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  variant="ghost"
+                  onClick={() => setEditTopicOpen(false)}
+                  data-ocid="cards.cancel_button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={!topicInput.trim() || savingTopic}
+                  onClick={async () => {
+                    if (!extActor || !token || !topicInput.trim()) return;
+                    setSavingTopic(true);
+                    try {
+                      await extActor.setCallTopic(token, topicInput.trim());
+                      setCallTopic(topicInput.trim());
+                      setEditTopicOpen(false);
+                    } catch {}
+                    setSavingTopic(false);
+                  }}
+                  data-ocid="cards.save_button"
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </motion.div>
   );
 }

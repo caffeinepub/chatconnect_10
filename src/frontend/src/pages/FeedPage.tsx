@@ -531,16 +531,38 @@ export default function FeedPage() {
                     >
                       <div className="p-5">
                         <div className="flex items-start gap-3">
-                          <Avatar className="w-10 h-10 flex-shrink-0">
-                            <AvatarFallback
-                              className={`bg-gradient-to-br ${getGradient(post.author.toString())} text-white text-sm font-bold`}
-                            >
-                              {post.authorName.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate({
+                                to: "/profile",
+                                search: { user: post.authorName } as any,
+                              })
+                            }
+                            className="flex-shrink-0 hover:opacity-80 transition-opacity"
+                            data-ocid="feed.link"
+                          >
+                            <Avatar className="w-10 h-10">
+                              <AvatarFallback
+                                className={`bg-gradient-to-br ${getGradient(post.author.toString())} text-white text-sm font-bold`}
+                              >
+                                {post.authorName.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          </button>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-sm text-foreground inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate({
+                                    to: "/profile",
+                                    search: { user: post.authorName } as any,
+                                  })
+                                }
+                                className="font-semibold text-sm text-foreground inline-flex items-center gap-1 hover:underline"
+                                data-ocid="feed.link"
+                              >
                                 {post.authorName}
                                 {verifiedUsers.has(post.authorName) && (
                                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 flex-shrink-0">
@@ -564,7 +586,7 @@ export default function FeedPage() {
                                 {post.authorName === "WILDFIRE" && (
                                   <Crown className="h-3 w-3 text-amber-400 flex-shrink-0" />
                                 )}
-                              </span>
+                              </button>
                               <span className="text-xs text-muted-foreground">
                                 · {formatRelativeTime(post.timestamp)}
                               </span>

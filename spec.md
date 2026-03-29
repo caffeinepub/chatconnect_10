@@ -1,38 +1,32 @@
 # Wave Chat
 
 ## Current State
-Wave Chat is a mobile-first social/voice chat app. Current features include: username/password auth, lobby chatroom, calling cards with WebRTC voice calls, news feed with likes/comments, private messaging (Inbox), notification bell, profile pages, admin panel (WILDFIRE), verified badges, ban system (no duration), dark mode toggle, online/offline dots on calling cards, bio/about, profile visit counter, custom status, read receipts, typing indicators.
-
-The BottomNav uses `bg-white` (not dark-mode aware). Notification items are simple list rows (no card padding). Feed has no auto-refresh. The ban system has no duration - it's indefinite with no expiry. The AdminPanel's `banLocalUser` takes no duration parameter.
+Wave Chat is a mobile-first social/chat app with username/password auth, lobby chatroom, calling cards, news feed, private messaging (inbox), notifications, profiles, voice/video calls, and admin panel for WILDFIRE.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Global dark mode: BottomNav, ServerStatusBanner, all nav chrome must respect dark mode (use `bg-background` not hardcoded `bg-white`)
-- Card-style notifications: each notification item becomes a rounded card with more vertical padding (p-4), subtle shadow, unread indicator as left border accent
-- Feed auto-refresh: poll `getPostsAsLocal` every 3 seconds (already polls but may not in all code paths - ensure it runs and is fast)
-- Green online dot on profile pictures in chat thread headers, conversation list avatars, and calling card avatars
-- Voice messages in DMs: hold-to-record button in ChatWindow, preview before send, send as base64 data URI prefixed with `[VOICE]` in the message text field
-- Voice messages in Lobby: record button in LobbyPage message area
-- Push notifications: use browser Notification API for incoming call requests and new DMs (request permission on login)
-- Language tags on all feed posts (already partially done - ensure visible on every post card)
-- One-tap profile access: clicking any username or avatar in Feed, Lobby messages, or calling card areas navigates to `/profile?user=<username>`
-- Inbox Calling: phone icon button in MessagesPage chat header (when thread is open) - tapping sends a call request to that user
-- Ban duration presets in AdminPanel: when banning, show a picker with "10 min", "24 hours", "7 days" before confirming. Pass duration in nanoseconds to new `banLocalUserWithDuration` backend method
-- Ban Shield: after login, if user is banned, show a full-screen non-dismissible overlay "You are banned until [formatted date/time]". Check `isUserBanned` and new `getBanExpiry` backend method
-- Auto-Unlock: on ban shield screen, poll every 30s; when ban expires, auto-redirect to feed
+- Viewport meta tag: `user-scalable=no, maximum-scale=1` to disable manual page zoom
+- Admin Panel button under Settings gear icon on profile page (in addition to existing profile page access)
 
 ### Modify
-- `AdminUserInfo` type: add `banExpiresAt?: bigint` field
-- AdminPanel: replace single "Ban" button with ban-duration picker flow; show ban expiry time next to BANNED badge
-- BottomNav: change `bg-white` to `bg-background` and `border-t border-border` stays; ensure text colors use CSS vars
-- NotificationBell: redesign items as cards (rounded-xl, p-4, shadow-sm, left border for unread)
-- FeedPage: add 3s polling interval on posts
+- **GlobalCallWatcher**: Remove video call toast popup entirely. Remove the regular incoming call toast popup too. Only keep the floating Accept/Deny banner for voice calls (the existing IncomingCallBanner component). Video call requests should show only via banner, not toast.
+- **Dark mode**: Ensure ALL pages have full dark mode coverage — Lobby page white portions, app name/header bars, all sub-menus and settings overlays.
+- **Messages/DM**: Fix sendDirectMessage so messages actually get stored and displayed. Fix inbox conversations list to populate.
+- **Lobby Voice**: Fix On Air (mic on + speaker on) vs Listeners (speaker only, mic off) distinction. Before joining On Air, explicitly request mic permission. User lands in Listeners on join, moves to On Air only when mic is enabled.
+- **Video call**: Fix video stream so both parties can see each other. Ensure remote video track is properly rendered.
+- **Profile tap**: Tapping any username or profile picture anywhere (Feed posts, Lobby chat, Inbox, Calling cards) navigates to that user's full profile page — not a calling card popup.
 
 ### Remove
-- Nothing removed
+- Toast popup for incoming voice calls (keep only floating banner)
+- Toast popup for video call requests (keep only floating banner if any)
 
 ## Implementation Plan
-1. Edit `src/backend/main.mo`: add `banExpiry` map (`Map<Text, Time.Time>`), add `banLocalUserWithDuration(token, username, durationNs)` function that sets expiry, modify `isUserBanned` query to check expiry and auto-remove if expired, add `getBanExpiry(username)` query returning `?Time.Time`, update `AdminUserInfo` to include `banExpiresAt`
-2. Edit `src/frontend/src/backend.d.ts`: add `banLocalUserWithDuration`, `getBanExpiry` methods; add `banExpiresAt?: Time` to `AdminUserInfo`
-3. Frontend agent handles all UI changes: dark mode in BottomNav/nav chrome, card notifications, feed refresh, online dots in DM avatars, voice messages (record/playback in DMs and Lobby), push notifications, language tags on posts, one-tap profile nav, inbox call button, AdminPanel ban duration UI, BanShield component
+1. Update `src/frontend/index.html` viewport meta to disable user zoom
+2. In `GlobalCallWatcher.tsx`: remove both toast() calls for incoming calls and video call signals — let the existing floating banner handle incoming voice calls
+3. Fix dark mode in `LobbyPage.tsx`, `BottomNav.tsx`, and any page with white background sections — ensure `dark:bg-*` classes cover all containers
+4. Fix `MessagesPage.tsx`: ensure sendDirectMessage is called with correct params and conversations are fetched properly
+5. Fix `LobbyPage.tsx` voice: add mic permission request before On Air, track On Air vs Listeners state correctly
+6. Fix `VideoCallScreen.tsx`: ensure video tracks are added to peer connection and remote video renders
+7. Add clickable username/avatar navigation to profile in Feed, Lobby chat messages, Inbox, CallingCards
+8. Add Admin Panel trigger button inside the Settings sheet on MyProfilePage

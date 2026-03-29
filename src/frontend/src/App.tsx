@@ -12,8 +12,10 @@ import LobbyPage from "./pages/LobbyPage";
 import LoginPage from "./pages/LoginPage";
 import MessagesPage from "./pages/MessagesPage";
 import MyProfilePage from "./pages/MyProfilePage";
+import NotificationsPage from "./pages/NotificationsPage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 import SignupPage from "./pages/SignupPage";
+import VideoCallScreen from "./pages/VideoCallScreen";
 
 // Init dark mode from localStorage before first render
 const savedDarkMode = localStorage.getItem("wavechat_darkmode");
@@ -83,6 +85,18 @@ const messagesRoute = createRoute({
   component: MessagesPage,
 });
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications",
+  component: NotificationsPage,
+});
+
+const videoCallRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/video-call/$callId",
+  component: VideoCallScreen,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -94,6 +108,8 @@ const routeTree = rootRoute.addChildren([
   callRoute,
   profileRoute,
   messagesRoute,
+  notificationsRoute,
+  videoCallRoute,
 ]);
 
 const router = createRouter({ routeTree });
@@ -106,12 +122,17 @@ declare module "@tanstack/react-router" {
 
 export default function App() {
   useEffect(() => {
-    const saved = localStorage.getItem("wavechat_darkmode");
-    if (saved === "true") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    const applyDark = () => {
+      const saved = localStorage.getItem("wavechat_darkmode");
+      if (saved === "true") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+    applyDark();
+    window.addEventListener("storage", applyDark);
+    return () => window.removeEventListener("storage", applyDark);
   }, []);
 
   return (

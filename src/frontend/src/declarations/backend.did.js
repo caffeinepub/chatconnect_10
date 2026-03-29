@@ -25,13 +25,20 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const Time = IDL.Int;
+export const AdminUserInfo = IDL.Record({
+  'username' : IDL.Text,
+  'displayName' : IDL.Text,
+  'banExpiresAt' : IDL.Opt(Time),
+  'isVerified' : IDL.Bool,
+  'isBanned' : IDL.Bool,
+});
 export const CallStatus = IDL.Variant({
   'pending' : IDL.Null,
   'denied' : IDL.Null,
   'ended' : IDL.Null,
   'accepted' : IDL.Null,
 });
-export const Time = IDL.Int;
 export const CallRequestWithStatus = IDL.Record({
   'id' : IDL.Nat,
   'status' : CallStatus,
@@ -62,6 +69,8 @@ export const Comment = IDL.Record({
   'postId' : IDL.Nat,
 });
 export const ConversationSummary = IDL.Record({
+  'lastMessageIsRead' : IDL.Bool,
+  'lastMessageSender' : IDL.Text,
   'otherUsername' : IDL.Text,
   'lastMessage' : IDL.Text,
   'unreadCount' : IDL.Nat,
@@ -178,7 +187,15 @@ export const idlService = IDL.Service({
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'banLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'banLocalUserWithDuration' : IDL.Func(
+      [SessionToken, IDL.Text, IDL.Nat],
+      [],
+      [],
+    ),
   'blockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'checkIsWildfireAdmin' : IDL.Func([SessionToken], [IDL.Bool], ['query']),
+  'clearCallTopic' : IDL.Func([SessionToken], [], []),
   'createPost' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'createPostAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
   'createUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
@@ -193,6 +210,12 @@ export const idlService = IDL.Service({
   'endCall' : IDL.Func([IDL.Nat], [], []),
   'endCallAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
   'followUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'getAllUsersForAdmin' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(AdminUserInfo)],
+      ['query'],
+    ),
+  'getBanExpiry' : IDL.Func([IDL.Text], [IDL.Opt(Time)], ['query']),
   'getBlockedUsers' : IDL.Func([SessionToken], [IDL.Vec(IDL.Text)], ['query']),
   'getCallRequest' : IDL.Func(
       [IDL.Nat],
@@ -205,6 +228,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(LocalCallRequest)],
       ['query'],
     ),
+  'getCallTopic' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
@@ -252,6 +276,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(Notification)],
       ['query'],
     ),
+  'getOnlineUsernames' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
   'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
   'getPostLikesAsLocal' : IDL.Func(
       [SessionToken, IDL.Nat],
@@ -261,6 +286,11 @@ export const idlService = IDL.Service({
   'getPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
   'getPostsAsLocal' : IDL.Func([SessionToken], [IDL.Vec(Post)], ['query']),
   'getProfileSettings' : IDL.Func([SessionToken], [ProfileSettings], ['query']),
+  'getProfileVisitors' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Record({ 'visitors' : IDL.Vec(IDL.Text), 'count' : IDL.Nat })],
+      ['query'],
+    ),
   'getPublicProfileSettings' : IDL.Func(
       [IDL.Text],
       [ProfileSettings],
@@ -268,11 +298,13 @@ export const idlService = IDL.Service({
     ),
   'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
   'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
+  'getUserBio' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
       ['query'],
     ),
+  'getUserStatus' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
   'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
   'getVoiceParticipants' : IDL.Func(
@@ -280,10 +312,13 @@ export const idlService = IDL.Service({
       [IDL.Vec(VoiceParticipant)],
       ['query'],
     ),
+  'grantVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
   'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+  'isUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'isUserVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'joinVoiceChannel' : IDL.Func(
       [SessionToken],
       [IDL.Vec(VoiceParticipant)],
@@ -297,11 +332,14 @@ export const idlService = IDL.Service({
   'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
   'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
   'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'pingOnline' : IDL.Func([SessionToken], [], []),
+  'recordProfileVisit' : IDL.Func([SessionToken, IDL.Text], [], []),
   'registerLocalAccount' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)],
       [],
       [],
     ),
+  'revokeVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
   'sendCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
@@ -313,11 +351,15 @@ export const idlService = IDL.Service({
   'sendMessage' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'sendMessageAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
   'sendSignal' : IDL.Func([SessionToken, IDL.Text, IDL.Text, IDL.Text], [], []),
+  'setCallTopic' : IDL.Func([SessionToken, IDL.Text], [], []),
   'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+  'setUserStatus' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'unbanLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'unlikePost' : IDL.Func([IDL.Nat], [], []),
   'unlikePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'updateLocalUserBio' : IDL.Func([SessionToken, IDL.Text], [], []),
   'updateLocalUserDisplayName' : IDL.Func(
       [SessionToken, IDL.Text],
       [IDL.Text],
@@ -359,13 +401,20 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const Time = IDL.Int;
+  const AdminUserInfo = IDL.Record({
+    'username' : IDL.Text,
+    'displayName' : IDL.Text,
+    'banExpiresAt' : IDL.Opt(Time),
+    'isVerified' : IDL.Bool,
+    'isBanned' : IDL.Bool,
+  });
   const CallStatus = IDL.Variant({
     'pending' : IDL.Null,
     'denied' : IDL.Null,
     'ended' : IDL.Null,
     'accepted' : IDL.Null,
   });
-  const Time = IDL.Int;
   const CallRequestWithStatus = IDL.Record({
     'id' : IDL.Nat,
     'status' : CallStatus,
@@ -396,6 +445,8 @@ export const idlFactory = ({ IDL }) => {
     'postId' : IDL.Nat,
   });
   const ConversationSummary = IDL.Record({
+    'lastMessageIsRead' : IDL.Bool,
+    'lastMessageSender' : IDL.Text,
     'otherUsername' : IDL.Text,
     'lastMessage' : IDL.Text,
     'unreadCount' : IDL.Nat,
@@ -512,7 +563,15 @@ export const idlFactory = ({ IDL }) => {
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'banLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'banLocalUserWithDuration' : IDL.Func(
+        [SessionToken, IDL.Text, IDL.Nat],
+        [],
+        [],
+      ),
     'blockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'checkIsWildfireAdmin' : IDL.Func([SessionToken], [IDL.Bool], ['query']),
+    'clearCallTopic' : IDL.Func([SessionToken], [], []),
     'createPost' : IDL.Func([IDL.Text], [IDL.Nat], []),
     'createPostAsLocal' : IDL.Func([SessionToken, IDL.Text], [IDL.Nat], []),
     'createUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
@@ -527,6 +586,12 @@ export const idlFactory = ({ IDL }) => {
     'endCall' : IDL.Func([IDL.Nat], [], []),
     'endCallAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
     'followUser' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'getAllUsersForAdmin' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(AdminUserInfo)],
+        ['query'],
+      ),
+    'getBanExpiry' : IDL.Func([IDL.Text], [IDL.Opt(Time)], ['query']),
     'getBlockedUsers' : IDL.Func(
         [SessionToken],
         [IDL.Vec(IDL.Text)],
@@ -547,6 +612,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(LocalCallRequest)],
         ['query'],
       ),
+    'getCallTopic' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
@@ -594,6 +660,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(Notification)],
         ['query'],
       ),
+    'getOnlineUsernames' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
     'getPostLikesAsLocal' : IDL.Func(
         [SessionToken, IDL.Nat],
@@ -607,6 +674,11 @@ export const idlFactory = ({ IDL }) => {
         [ProfileSettings],
         ['query'],
       ),
+    'getProfileVisitors' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Record({ 'visitors' : IDL.Vec(IDL.Text), 'count' : IDL.Nat })],
+        ['query'],
+      ),
     'getPublicProfileSettings' : IDL.Func(
         [IDL.Text],
         [ProfileSettings],
@@ -614,11 +686,13 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
     'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
+    'getUserBio' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
+    'getUserStatus' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
     'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
     'getVoiceParticipants' : IDL.Func(
@@ -626,10 +700,13 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(VoiceParticipant)],
         ['query'],
       ),
+    'grantVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
     'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
     'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
+    'isUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'isUserVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'joinVoiceChannel' : IDL.Func(
         [SessionToken],
         [IDL.Vec(VoiceParticipant)],
@@ -643,11 +720,14 @@ export const idlFactory = ({ IDL }) => {
     'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
     'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
     'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'pingOnline' : IDL.Func([SessionToken], [], []),
+    'recordProfileVisit' : IDL.Func([SessionToken, IDL.Text], [], []),
     'registerLocalAccount' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Opt(ExternalBlob)],
         [],
         [],
       ),
+    'revokeVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'sendCallRequestAsLocal' : IDL.Func(
@@ -667,11 +747,15 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'setCallTopic' : IDL.Func([SessionToken, IDL.Text], [], []),
     'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+    'setUserStatus' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'unbanLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'unlikePost' : IDL.Func([IDL.Nat], [], []),
     'unlikePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'updateLocalUserBio' : IDL.Func([SessionToken, IDL.Text], [], []),
     'updateLocalUserDisplayName' : IDL.Func(
         [SessionToken, IDL.Text],
         [IDL.Text],

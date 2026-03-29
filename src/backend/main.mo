@@ -12,8 +12,6 @@ import Text "mo:core/Text";
 import Array "mo:core/Array";
 import Set "mo:core/Set";
 
-
-
 actor {
   type SessionToken = Nat;
   type NotificationType = { #like; #comment; #callRequest };
@@ -513,6 +511,35 @@ actor {
       case (?s) { s };
       case (null) { { hideFollowers = false; hideFollowing = false } };
     };
+  };
+
+  // ---- Call Topics (New) ----
+
+  let callTopics = Map.empty<Text, Text>();
+
+  public shared func setCallTopic(token : SessionToken, topic : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+
+    if (topic.size() > 100) {
+      Runtime.trap("Topic must be 100 chars or less");
+    };
+
+    callTopics.add(username, topic);
+  };
+
+  public query func getCallTopic(username : Text) : async ?Text {
+    callTopics.get(username);
+  };
+
+  public shared func clearCallTopic(token : SessionToken) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    callTopics.remove(username);
   };
 
   // ---- Notifications ----

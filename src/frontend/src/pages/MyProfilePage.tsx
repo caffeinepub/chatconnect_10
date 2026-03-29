@@ -70,6 +70,16 @@ export default function MyProfilePage() {
   const navigate = useNavigate();
   const extActor = actor as unknown as ExtendedBackend | null;
 
+  // Support viewing another user's profile via ?user=username
+  const [viewingUser, setViewingUser] = useState<string | null>(null);
+  const [viewedUserProfile, setViewedUserProfile] = useState<LocalUser | null>(
+    null,
+  );
+  const [viewedUserBio, setViewedUserBio] = useState<string>("");
+  const [viewedUserStatus, setViewedUserStatus] = useState<string>("");
+  const [viewedUserVerified, setViewedUserVerified] = useState(false);
+  const [viewedUserIsAdmin, setViewedUserIsAdmin] = useState(false);
+
   const [profile, setProfile] = useState<LocalUser | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -109,6 +119,39 @@ export default function MyProfilePage() {
 
   // Custom status
   const [currentStatus, setCurrentStatus] = useState<string>("none");
+
+  // Read ?user= param from URL to view another user's profile
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const u = params.get("user");
+    if (u) setViewingUser(u);
+  }, []);
+
+  // Load the viewed user's data when viewingUser is set
+  useEffect(() => {
+    if (!viewingUser || !extActor) return;
+    extActor
+      .getLocalUsers()
+      .then((users) => {
+        const found = users.find(
+          (u) => u.username === viewingUser || u.displayName === viewingUser,
+        );
+        if (found) {
+          setViewedUserProfile(found);
+          setViewedUserIsAdmin(found.username === "WILDFIRE");
+          Promise.all([
+            extActor.getUserBio(found.username).catch(() => ""),
+            extActor.getUserStatus(found.username).catch(() => ""),
+            extActor.isUserVerified(found.username).catch(() => false),
+          ]).then(([b, s, v]) => {
+            setViewedUserBio(b ?? "");
+            setViewedUserStatus(s ?? "");
+            setViewedUserVerified(v);
+          });
+        }
+      })
+      .catch(() => {});
+  }, [viewingUser, extActor]);
 
   useEffect(() => {
     if (!isLocalLoggedIn) {
@@ -314,6 +357,110 @@ export default function MyProfilePage() {
       .slice(0, 2) || username.slice(0, 2).toUpperCase();
 
   const photoUrl = photoPreview ?? profile?.photo?.getDirectURL() ?? null;
+
+  // --- Read-only view for another user's profile ---
+  if (viewingUser && viewedUserProfile) {
+    const vp = viewedUserProfile;
+    const vpPhoto = vp.photo?.getDirectURL() ?? null;
+    const vpInitials =
+      vp.displayName.slice(0, 2).toUpperCase() ||
+      vp.username.slice(0, 2).toUpperCase();
+    const vpGradient = "from-purple-500 to-teal-400";
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 flex flex-col">
+        <GlobalCallWatcher />
+        <header className="bg-white dark:bg-gray-900 border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(-1 as any)}
+              className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-muted transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <span className="font-display font-bold text-lg">Profile</span>
+          </div>
+        </header>
+        <main className="flex-1 flex items-start justify-center px-4 py-10 pb-28">
+          <div className="w-full max-w-md">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+              <div className="h-24 bg-gradient-to-r from-purple-500 via-indigo-500 to-teal-400" />
+              <div className="px-6 pb-6">
+                <div className="flex items-end justify-between -mt-12 mb-4">
+                  <Avatar className="w-20 h-20 border-4 border-white shadow-md">
+                    {vpPhoto && (
+                      <AvatarImage src={vpPhoto} alt={vp.displayName} />
+                    )}
+                    <AvatarFallback
+                      className={`bg-gradient-to-br ${vpGradient} text-white text-2xl font-bold`}
+                    >
+                      {vpInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                <div className="space-y-1 mb-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl font-bold">{vp.displayName}</h2>
+                    {viewedUserVerified && (
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 flex-shrink-0">
+                        <svg
+                          role="img"
+                          aria-label="verified"
+                          viewBox="0 0 12 12"
+                          className="w-3 h-3"
+                        >
+                          <polyline
+                            points="2,6 5,9 10,3"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    )}
+                    {viewedUserIsAdmin && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-400/30">
+                        <Crown className="h-3 w-3" /> Admin
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    @{vp.username}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Age: {vp.age.toString()}
+                  </p>
+                  {viewedUserStatus && viewedUserStatus !== "" && (
+                    <p className="text-xs text-muted-foreground">
+                      Status: {viewedUserStatus}
+                    </p>
+                  )}
+                  {viewedUserBio && (
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                      {viewedUserBio}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    className="flex-1 bg-gradient-to-r from-purple-500 to-teal-400 text-white border-0"
+                    onClick={() => {
+                      window.location.href = `/messages?user=${encodeURIComponent(vp.username)}`;
+                    }}
+                  >
+                    Message
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 flex flex-col">
@@ -738,6 +885,22 @@ export default function MyProfilePage() {
               />
             </div>
           </div>
+          {isAdmin && (
+            <div className="pt-2 border-t border-border">
+              <Button
+                variant="ghost"
+                className="w-full flex items-center gap-2 justify-start text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950"
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setAdminPanelOpen(true);
+                }}
+                data-ocid="profile.open_modal_button"
+              >
+                <span>👑</span>
+                Admin Dashboard
+              </Button>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="ghost"

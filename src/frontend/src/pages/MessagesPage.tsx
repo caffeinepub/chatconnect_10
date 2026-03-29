@@ -13,6 +13,7 @@ import {
   Mic,
   Phone,
   Send,
+  Video,
   X,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -194,7 +195,7 @@ export default function MessagesPage() {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
     const pollTyping = async () => {
       try {
-        const typing = await extActor.getTypingStatus(
+        const typing = await (extActor as any).getTypingStatus(
           localSession.token,
           selectedUser,
         );
@@ -218,12 +219,12 @@ export default function MessagesPage() {
   const handleInputChange = (value: string) => {
     setMessageText(value);
     if (!selectedUser || !localSession || !extActor) return;
-    extActor
+    (extActor as any)
       .setTypingStatus(localSession.token, selectedUser, true)
       .catch(() => {});
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      extActor
+      (extActor as any)
         .setTypingStatus(localSession.token, selectedUser, false)
         .catch(() => {});
     }, 4_000);
@@ -247,7 +248,7 @@ export default function MessagesPage() {
     const text = messageText.trim();
     setMessageText("");
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    extActor
+    (extActor as any)
       .setTypingStatus(localSession.token, selectedUser, false)
       .catch(() => {});
     const optimistic: DirectMessage = {
@@ -578,6 +579,28 @@ export default function MessagesPage() {
                   ) : (
                     <Phone className="h-4 w-4" />
                   )}
+                </Button>
+                {/* Video Call button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (!selectedUser || !localSession || !extActor) return;
+                    const callId = `${selectedUser}_${Date.now()}`;
+                    extActor
+                      .sendSignal(
+                        localSession.token,
+                        selectedUser,
+                        "video-call-request",
+                        callId,
+                      )
+                      .catch(() => {});
+                    navigate({ to: "/video-call/$callId", params: { callId } });
+                  }}
+                  className="rounded-full h-9 w-9 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950"
+                  data-ocid="messages.secondary_button"
+                >
+                  <Video className="h-4 w-4" />
                 </Button>
               </div>
 

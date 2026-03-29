@@ -209,20 +209,27 @@ export default function LobbyPage() {
   const onlineVoiceUsers = voiceParticipants;
   const tabUsers = voiceTab === "mic" ? onMicUsers : onlineVoiceUsers;
 
-  // Handle Join Voice with permission check
+  const [micDenied, setMicDenied] = useState(false);
+
+  // Handle Join Voice - auto request mic inline, no pre-toast
   const handleJoinVoice = async () => {
+    setMicDenied(false);
     if (micPermission === "denied") {
-      toast.error(
-        "Microphone blocked. Tap the lock icon in your browser address bar and allow mic access.",
-      );
+      setMicDenied(true);
       return;
     }
-    if (micPermission === "prompt" || micPermission === "unknown") {
-      // Request permission first — browser will show native prompt
-      const granted = await requestMicPermission();
-      if (!granted) return;
+    try {
+      if (micPermission === "prompt" || micPermission === "unknown") {
+        const granted = await requestMicPermission();
+        if (!granted) {
+          setMicDenied(true);
+          return;
+        }
+      }
+      await joinChannel();
+    } catch {
+      setMicDenied(true);
     }
-    await joinChannel();
   };
 
   return (
@@ -260,33 +267,14 @@ export default function LobbyPage() {
 
         {/* Mic Permission Banner */}
         {micPermission === "denied" && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+          <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
             <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <p className="text-xs text-amber-800 flex-1">
+            <p className="text-xs text-amber-800 dark:text-amber-200 flex-1">
               Microphone blocked. To use voice chat, tap the lock icon in your
               browser's address bar and allow mic access.
             </p>
           </div>
         )}
-
-        {/* Mic Permission Prompt Banner (not yet asked) */}
-        {(micPermission === "prompt" || micPermission === "unknown") &&
-          !isInChannel && (
-            <div className="bg-violet-50 border-b border-violet-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
-              <Mic className="h-4 w-4 text-violet-600 flex-shrink-0" />
-              <p className="text-xs text-violet-800 flex-1">
-                Tap <strong>Join Voice</strong> to enable mic and join the voice
-                channel.
-              </p>
-              <button
-                type="button"
-                onClick={handleJoinVoice}
-                className="text-xs font-semibold text-violet-700 bg-violet-100 hover:bg-violet-200 px-3 py-1 rounded-full transition-colors flex-shrink-0"
-              >
-                Allow Mic
-              </button>
-            </div>
-          )}
 
         {/* Voice Status Strip — only on Lobby page, two tabs */}
         <div className="bg-background border-b border-border flex-shrink-0">
@@ -532,7 +520,7 @@ export default function LobbyPage() {
 
             {/* Bottom controls + input, sits ABOVE the bottom nav bar */}
             <div
-              className="p-4 border-t border-border bg-white flex-shrink-0"
+              className="p-4 border-t border-border bg-background flex-shrink-0"
               style={{
                 paddingBottom:
                   "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
@@ -578,6 +566,12 @@ export default function LobbyPage() {
                       <Radio className="h-4 w-4" />
                       Join Voice
                     </Button>
+                    {micDenied && (
+                      <p className="text-xs text-red-500 text-center mt-1">
+                        Microphone access denied. Please allow mic in browser
+                        settings.
+                      </p>
+                    )}
 
                     {/* Test Mic Button */}
                     <Tooltip>
