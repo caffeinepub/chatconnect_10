@@ -10,6 +10,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  Clock,
   Crown,
   Loader2,
   Search,
@@ -33,6 +34,23 @@ interface AdminPanelProps {
   token: SessionToken;
 }
 
+function formatBanExpiry(expiresAt: bigint): string {
+  const ms = Number(expiresAt / BigInt(1_000_000));
+  const d = new Date(ms);
+  return d.toLocaleString([], {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const BAN_DURATIONS = [
+  { label: "10 min", ns: BigInt(10 * 60 * 1_000_000_000) },
+  { label: "24 hrs", ns: BigInt(24 * 60 * 60 * 1_000_000_000) },
+  { label: "7 days", ns: BigInt(7 * 24 * 60 * 60 * 1_000_000_000) },
+];
+
 export function AdminPanel({
   open,
   onClose,
@@ -45,6 +63,8 @@ export function AdminPanel({
   const [actionLoading, setActionLoading] = useState<Record<string, string>>(
     {},
   );
+  // Track which user's ban picker is open
+  const [banPickerUser, setBanPickerUser] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     if (!extActor) return;
@@ -92,17 +112,31 @@ export function AdminPanel({
     }
   };
 
-  const handleBan = async (user: AdminUserInfo) => {
+  const handleUnban = async (user: AdminUserInfo) => {
     if (!extActor) return;
     setAction(user.username, "ban");
     try {
-      if (user.isBanned) {
-        await extActor.unbanLocalUser(token, user.username);
-        toast.success(`Unbanned ${user.displayName}`);
-      } else {
-        await extActor.banLocalUser(token, user.username);
-        toast.warning(`Banned ${user.displayName}`);
-      }
+      await extActor.unbanLocalUser(token, user.username);
+      toast.success(`Unbanned ${user.displayName}`);
+      await fetchUsers();
+    } catch {
+      toast.error("Action failed");
+    } finally {
+      clearAction(user.username);
+    }
+  };
+
+  const handleBanWithDuration = async (
+    user: AdminUserInfo,
+    durationNs: bigint,
+    label: string,
+  ) => {
+    if (!extActor) return;
+    setBanPickerUser(null);
+    setAction(user.username, "ban");
+    try {
+      await extActor.banLocalUserWithDuration(token, user.username, durationNs);
+      toast.warning(`Banned ${user.displayName} for ${label}`);
       await fetchUsers();
     } catch {
       toast.error("Action failed");
@@ -201,120 +235,168 @@ export function AdminPanel({
                   const isWildfire = user.username === "WILDFIRE";
                   const busy = actionLoading[user.username];
                   const initials = user.displayName.slice(0, 2).toUpperCase();
+                  const isBanPickerOpen = banPickerUser === user.username;
 
                   return (
                     <div
                       key={user.username}
-                      className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                      className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${
                         user.isBanned
                           ? "bg-red-500/10 border-red-500/20"
                           : "bg-white/5 border-white/10 hover:bg-white/8"
                       }`}
                       data-ocid={`admin.item.${i + 1}`}
                     >
-                      {/* Avatar */}
-                      <Avatar className="w-11 h-11 flex-shrink-0">
-                        <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-sm">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <Avatar className="w-11 h-11 flex-shrink-0">
+                          <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-sm">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
 
-                      {/* Name + badges */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {isWildfire && (
-                            <Crown className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
-                          )}
-                          <span className="font-semibold text-sm text-white truncate">
-                            {user.displayName}
-                          </span>
-                          {user.isVerified && (
-                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 flex-shrink-0">
-                              <svg
-                                role="img"
-                                aria-label="verified"
-                                viewBox="0 0 12 12"
-                                className="w-2.5 h-2.5"
-                              >
-                                <polyline
-                                  points="2,6 5,9 10,3"
-                                  fill="none"
-                                  stroke="white"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
+                        {/* Name + badges */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isWildfire && (
+                              <Crown className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+                            )}
+                            <span className="font-semibold text-sm text-white truncate">
+                              {user.displayName}
                             </span>
-                          )}
-                          {user.isBanned && (
-                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0 h-4">
-                              BANNED
-                            </Badge>
+                            {user.isVerified && (
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 flex-shrink-0">
+                                <svg
+                                  role="img"
+                                  aria-label="verified"
+                                  viewBox="0 0 12 12"
+                                  className="w-2.5 h-2.5"
+                                >
+                                  <polyline
+                                    points="2,6 5,9 10,3"
+                                    fill="none"
+                                    stroke="white"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </span>
+                            )}
+                            {user.isBanned && (
+                              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0 h-4">
+                                BANNED
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/40">
+                            @{user.username}
+                          </p>
+                          {/* Show ban expiry if banned */}
+                          {user.isBanned && user.banExpiresAt && (
+                            <p className="text-[10px] text-red-400/70 flex items-center gap-1 mt-0.5">
+                              <Clock className="h-2.5 w-2.5" />
+                              until {formatBanExpiry(user.banExpiresAt)}
+                            </p>
                           )}
                         </div>
-                        <p className="text-xs text-white/40">
-                          @{user.username}
-                        </p>
+
+                        {/* Action buttons */}
+                        {!isWildfire && (
+                          <div className="flex gap-1.5 flex-shrink-0">
+                            {/* Verify toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleVerify(user)}
+                              disabled={!!busy}
+                              title={
+                                user.isVerified
+                                  ? "Remove verified"
+                                  : "Grant verified"
+                              }
+                              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${
+                                user.isVerified
+                                  ? "bg-blue-500 text-white shadow-md shadow-blue-500/40"
+                                  : "bg-white/10 text-white/50 hover:bg-blue-500/30 hover:text-blue-400"
+                              }`}
+                              data-ocid={`admin.toggle.${i + 1}`}
+                            >
+                              {busy === "verify" ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : user.isVerified ? (
+                                <UserCheck className="h-3.5 w-3.5" />
+                              ) : (
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+
+                            {/* Ban toggle */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (user.isBanned) {
+                                  handleUnban(user);
+                                } else {
+                                  setBanPickerUser(
+                                    isBanPickerOpen ? null : user.username,
+                                  );
+                                }
+                              }}
+                              disabled={!!busy}
+                              title={user.isBanned ? "Unban user" : "Ban user"}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${
+                                user.isBanned
+                                  ? "bg-red-500 text-white shadow-md shadow-red-500/40"
+                                  : isBanPickerOpen
+                                    ? "bg-red-500/40 text-red-300"
+                                    : "bg-white/10 text-white/50 hover:bg-red-500/30 hover:text-red-400"
+                              }`}
+                              data-ocid={`admin.delete_button.${i + 1}`}
+                            >
+                              {busy === "ban" ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : user.isBanned ? (
+                                <UserX className="h-3.5 w-3.5" />
+                              ) : (
+                                <ShieldOff className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        )}
+
+                        {isWildfire && (
+                          <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px] flex-shrink-0">
+                            ADMIN
+                          </Badge>
+                        )}
                       </div>
 
-                      {/* Action buttons */}
-                      {!isWildfire && (
-                        <div className="flex gap-1.5 flex-shrink-0">
-                          {/* Verify toggle */}
+                      {/* Duration picker - inline */}
+                      {isBanPickerOpen && !user.isBanned && (
+                        <div className="flex items-center gap-2 pl-14 flex-wrap">
+                          <span className="text-xs text-white/50">
+                            Ban for:
+                          </span>
+                          {BAN_DURATIONS.map((d) => (
+                            <button
+                              key={d.label}
+                              type="button"
+                              onClick={() =>
+                                handleBanWithDuration(user, d.ns, d.label)
+                              }
+                              className="px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 hover:bg-red-500/40 border border-red-500/30 transition-colors"
+                            >
+                              {d.label}
+                            </button>
+                          ))}
                           <button
                             type="button"
-                            onClick={() => handleVerify(user)}
-                            disabled={!!busy}
-                            title={
-                              user.isVerified
-                                ? "Remove verified"
-                                : "Grant verified"
-                            }
-                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${
-                              user.isVerified
-                                ? "bg-blue-500 text-white shadow-md shadow-blue-500/40"
-                                : "bg-white/10 text-white/50 hover:bg-blue-500/30 hover:text-blue-400"
-                            }`}
-                            data-ocid={`admin.toggle.${i + 1}`}
+                            onClick={() => setBanPickerUser(null)}
+                            className="px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-white/50 hover:bg-white/20 transition-colors"
                           >
-                            {busy === "verify" ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : user.isVerified ? (
-                              <UserCheck className="h-3.5 w-3.5" />
-                            ) : (
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-
-                          {/* Ban toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleBan(user)}
-                            disabled={!!busy}
-                            title={user.isBanned ? "Unban user" : "Ban user"}
-                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${
-                              user.isBanned
-                                ? "bg-red-500 text-white shadow-md shadow-red-500/40"
-                                : "bg-white/10 text-white/50 hover:bg-red-500/30 hover:text-red-400"
-                            }`}
-                            data-ocid={`admin.delete_button.${i + 1}`}
-                          >
-                            {busy === "ban" ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : user.isBanned ? (
-                              <UserX className="h-3.5 w-3.5" />
-                            ) : (
-                              <ShieldOff className="h-3.5 w-3.5" />
-                            )}
+                            Cancel
                           </button>
                         </div>
-                      )}
-
-                      {isWildfire && (
-                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px] flex-shrink-0">
-                          ADMIN
-                        </Badge>
                       )}
                     </div>
                   );

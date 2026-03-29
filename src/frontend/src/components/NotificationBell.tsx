@@ -40,68 +40,51 @@ function notifLabel(notif: AppNotification): string {
   return "New notification";
 }
 
+function notifIcon(notif: AppNotification): string {
+  const nt = notif.notifType as string;
+  if (nt === "like") return "❤️";
+  if (nt === "comment") return "💬";
+  if (nt === "callRequest") return "📞";
+  return "🔔";
+}
+
 function notifDest(notif: AppNotification): string {
   const nt = notif.notifType as string;
   if (nt === "callRequest") return "/cards";
   return "/feed";
 }
 
-interface NotifPanelContentProps {
-  notifications: AppNotification[];
-  unreadCount: number;
-  onMarkAll: () => void;
-  onClickNotif: (notif: AppNotification) => void;
-}
-
-function NotifPanelContent({
-  notifications,
-  unreadCount,
-  onMarkAll,
-  onClickNotif,
-}: NotifPanelContentProps) {
+function NotifCard({
+  notif,
+  idx,
+  onClick,
+}: { notif: AppNotification; idx: number; onClick: () => void }) {
   return (
-    <>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <span className="font-semibold text-sm">Notifications</span>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={onMarkAll}
-            className="text-xs text-primary hover:underline"
-            data-ocid="nav.mark_all_button"
-          >
-            Mark all as read
-          </button>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-xl p-4 mb-2 shadow-sm border transition-colors ${
+        !notif.isRead
+          ? "border-l-4 border-l-violet-500 bg-violet-500/5 border-border"
+          : "border-l-4 border-l-transparent bg-card border-border hover:bg-muted/40"
+      }`}
+      data-ocid={`nav.item.${idx + 1}`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-lg flex-shrink-0 mt-0.5">{notifIcon(notif)}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-snug text-foreground">
+            {notifLabel(notif)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {relativeTime(notif.timestamp)}
+          </p>
+        </div>
+        {!notif.isRead && (
+          <span className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0 mt-1.5" />
         )}
       </div>
-      <div className="overflow-y-auto flex-1">
-        {notifications.length === 0 ? (
-          <div
-            className="px-4 py-6 text-center text-sm text-muted-foreground"
-            data-ocid="nav.empty_state"
-          >
-            No notifications yet
-          </div>
-        ) : (
-          notifications.map((notif, idx) => (
-            <button
-              key={notif.id.toString()}
-              type="button"
-              className={`w-full flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 text-left hover:bg-muted/50 transition-colors ${
-                !notif.isRead ? "bg-primary/5" : ""
-              }`}
-              onClick={() => onClickNotif(notif)}
-              data-ocid={`nav.item.${idx + 1}`}
-            >
-              <span className="leading-snug">{notifLabel(notif)}</span>
-              <span className="text-xs text-muted-foreground">
-                {relativeTime(notif.timestamp)}
-              </span>
-            </button>
-          ))
-        )}
-      </div>
-    </>
+    </button>
   );
 }
 
@@ -192,17 +175,14 @@ export function NotificationBell() {
       <>
         {triggerButton}
 
-        {/* Mobile bottom sheet overlay */}
         {open && (
           <>
-            {/* Backdrop */}
             <button
               type="button"
               className="fixed inset-0 bg-black/40 z-40 cursor-default"
               onClick={() => setOpen(false)}
               aria-label="Close notifications"
             />
-            {/* Sheet */}
             <div
               className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl shadow-2xl flex flex-col"
               style={{
@@ -211,7 +191,6 @@ export function NotificationBell() {
               }}
               data-ocid="nav.popover"
             >
-              {/* Drag handle */}
               <div className="flex justify-center pt-2 pb-1">
                 <div className="w-10 h-1 rounded-full bg-border" />
               </div>
@@ -238,7 +217,7 @@ export function NotificationBell() {
                   </button>
                 </div>
               </div>
-              <div className="overflow-y-auto flex-1">
+              <div className="overflow-y-auto flex-1 px-4 py-3">
                 {notifications.length === 0 ? (
                   <div
                     className="px-4 py-6 text-center text-sm text-muted-foreground"
@@ -248,20 +227,12 @@ export function NotificationBell() {
                   </div>
                 ) : (
                   notifications.map((notif, idx) => (
-                    <button
+                    <NotifCard
                       key={notif.id.toString()}
-                      type="button"
-                      className={`w-full flex flex-col items-start gap-0.5 px-4 py-3 cursor-pointer text-sm border-b border-border/50 last:border-0 text-left hover:bg-muted/50 transition-colors ${
-                        !notif.isRead ? "bg-primary/5" : ""
-                      }`}
+                      notif={notif}
+                      idx={idx}
                       onClick={() => handleClickNotif(notif)}
-                      data-ocid={`nav.item.${idx + 1}`}
-                    >
-                      <span className="leading-snug">{notifLabel(notif)}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {relativeTime(notif.timestamp)}
-                      </span>
-                    </button>
+                    />
                   ))
                 )}
               </div>
@@ -272,7 +243,7 @@ export function NotificationBell() {
     );
   }
 
-  // Desktop: keep existing dropdown
+  // Desktop dropdown
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -298,12 +269,41 @@ export function NotificationBell() {
         className="w-80 p-0"
         data-ocid="nav.dropdown_menu"
       >
-        <NotifPanelContent
-          notifications={notifications}
-          unreadCount={unreadCount}
-          onMarkAll={handleMarkAll}
-          onClickNotif={handleClickNotif}
-        />
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="font-semibold text-sm">Notifications</span>
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkAll}
+              className="text-xs text-primary hover:underline"
+              data-ocid="nav.mark_all_button"
+            >
+              Mark all as read
+            </button>
+          )}
+        </div>
+        <ScrollArea className="max-h-72">
+          <div className="px-3 py-3 flex flex-col">
+            {notifications.length === 0 ? (
+              <div
+                className="px-4 py-6 text-center text-sm text-muted-foreground"
+                data-ocid="nav.empty_state"
+              >
+                No notifications yet
+              </div>
+            ) : (
+              notifications.slice(0, 20).map((notif, idx) => (
+                <DropdownMenuItem key={notif.id.toString()} asChild>
+                  <NotifCard
+                    notif={notif}
+                    idx={idx}
+                    onClick={() => handleClickNotif(notif)}
+                  />
+                </DropdownMenuItem>
+              ))
+            )}
+          </div>
+        </ScrollArea>
       </DropdownMenuContent>
     </DropdownMenu>
   );

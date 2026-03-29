@@ -229,7 +229,7 @@ export default function LobbyPage() {
     <TooltipProvider>
       <GlobalCallWatcher />
       <div className="h-screen bg-background flex flex-col">
-        <header className="bg-white border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0">
+        <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
               W
@@ -289,7 +289,7 @@ export default function LobbyPage() {
           )}
 
         {/* Voice Status Strip — only on Lobby page, two tabs */}
-        <div className="bg-white border-b border-border flex-shrink-0">
+        <div className="bg-background border-b border-border flex-shrink-0">
           {/* Tab bar */}
           <div className="flex items-center gap-0 border-b border-border/50">
             <button
@@ -361,7 +361,7 @@ export default function LobbyPage() {
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-64 border-r border-border bg-white flex-shrink-0 hidden md:flex flex-col">
+          <aside className="w-64 border-r border-border bg-background flex-shrink-0 hidden md:flex flex-col">
             <div className="p-4 border-b border-border">
               <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
                 Online Users
@@ -494,12 +494,21 @@ export default function LobbyPage() {
                             className={`max-w-sm lg:max-w-md ${mine ? "items-end" : "items-start"} flex flex-col gap-1`}
                           >
                             {!mine && (
-                              <span className="text-xs text-muted-foreground px-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate({
+                                    to: "/profile",
+                                    search: { user: msg.authorName } as any,
+                                  })
+                                }
+                                className="text-xs text-muted-foreground px-1 hover:text-foreground transition-colors text-left"
+                              >
                                 {name}
-                              </span>
+                              </button>
                             )}
                             <div
-                              className={`px-4 py-2.5 rounded-2xl text-sm ${mine ? "text-white rounded-br-sm" : "bg-white border border-border text-foreground rounded-bl-sm"}`}
+                              className={`px-4 py-2.5 rounded-2xl text-sm ${mine ? "text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"}`}
                               style={
                                 mine
                                   ? {

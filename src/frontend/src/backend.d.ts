@@ -235,6 +235,8 @@ export interface backendInterface {
     banLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     unbanLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     getAllUsersForAdmin(token: SessionToken): Promise<Array<AdminUserInfo>>;
+    banLocalUserWithDuration(token: SessionToken, targetUsername: string, durationNs: bigint): Promise<void>;
+    getBanExpiry(username: string): Promise<Time | null>;
     recordProfileVisit(token: SessionToken, visitedUsername: string): Promise<void>;
     getProfileVisitors(token: SessionToken, username: string): Promise<{count: bigint; visitors: Array<string>}>;
     setUserStatus(token: SessionToken, status: string): Promise<void>;
@@ -246,4 +248,5 @@ export interface AdminUserInfo {
     displayName: string;
     isVerified: boolean;
     isBanned: boolean;
+    banExpiresAt?: Time;
 }

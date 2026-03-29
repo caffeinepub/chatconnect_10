@@ -10,10 +10,14 @@ import {
   Inbox,
   Loader2,
   LogOut,
+  Mic,
+  Phone,
   Send,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type {
   ConversationSummary,
   DirectMessage,
@@ -48,6 +52,27 @@ function relativeTime(timestamp: bigint): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+const VOICE_PREFIX = "[VOICE]:";
+
+function MessageBubble({ msg, isMe }: { msg: DirectMessage; isMe: boolean }) {
+  const isVoice = msg.text.startsWith(VOICE_PREFIX);
+  const voiceSrc = isVoice ? msg.text.slice(VOICE_PREFIX.length) : null;
+
+  if (isVoice && voiceSrc) {
+    return (
+      // biome-ignore lint/a11y/useMediaCaption: user-generated voice message
+      <audio
+        controls
+        src={voiceSrc}
+        className="max-w-[220px] h-9"
+        style={{ colorScheme: isMe ? "dark" : "light" }}
+      />
+    );
+  }
+
+  return <p className="text-sm leading-relaxed">{msg.text}</p>;
+}
+
 export default function MessagesPage() {
   const navigate = useNavigate();
   const { localSession, isLocalLoggedIn, logoutLocal } = useLocalAuth();
@@ -61,9 +86,20 @@ export default function MessagesPage() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingConvos, setIsLoadingConvos] = useState(true);
   const [isMobileThread, setIsMobileThread] = useState(false);
-  const [isTyping, setIsTyping] = useState(false); // other user is typing
+  const [isTyping, setIsTyping] = useState(false);
+  const [onlineUsernames, setOnlineUsernames] = useState<Set<string>>(
+    new Set(),
+  );
+  const [isCallSending, setIsCallSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
 
   // Auth guard
   useEffect(() => {
@@ -81,6 +117,23 @@ export default function MessagesPage() {
       setIsMobileThread(true);
     }
   }, []);
+
+  // Fetch online usernames
+  const fetchOnline = useCallback(async () => {
+    if (!extActor) return;
+    try {
+      const names = await extActor.getOnlineUsernames();
+      setOnlineUsernames(new Set(names));
+    } catch {
+      // ignore
+    }
+  }, [extActor]);
+
+  useEffect(() => {
+    fetchOnline();
+    const interval = setInterval(fetchOnline, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchOnline]);
 
   // Fetch conversations
   const fetchConversations = useCallback(async () => {
@@ -103,7 +156,7 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [fetchConversations]);
 
-  // Fetch messages for selected conversation
+  // Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession || !extActor || !selectedUser) return;
     try {
@@ -128,7 +181,7 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [selectedUser, fetchMessages]);
 
-  // Mark as read when opening conversation
+  // Mark as read
   useEffect(() => {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
     extActor
@@ -136,7 +189,7 @@ export default function MessagesPage() {
       .catch(() => {});
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
 
-  // Poll typing status
+  // Typing status
   useEffect(() => {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
     const pollTyping = async () => {
@@ -155,14 +208,19 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
 
+  // Clean up voice preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
+    };
+  }, [voicePreviewUrl]);
+
   const handleInputChange = (value: string) => {
     setMessageText(value);
     if (!selectedUser || !localSession || !extActor) return;
-    // Send typing start
     extActor
       .setTypingStatus(localSession.token, selectedUser, true)
       .catch(() => {});
-    // Clear after 4 seconds of inactivity
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       extActor
@@ -176,6 +234,11 @@ export default function MessagesPage() {
     setIsMobileThread(true);
     setMessages([]);
     setIsTyping(false);
+    setVoiceBlob(null);
+    if (voicePreviewUrl) {
+      URL.revokeObjectURL(voicePreviewUrl);
+      setVoicePreviewUrl(null);
+    }
   };
 
   const handleSend = async () => {
@@ -183,7 +246,6 @@ export default function MessagesPage() {
       return;
     const text = messageText.trim();
     setMessageText("");
-    // Stop typing indicator
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     extActor
       .setTypingStatus(localSession.token, selectedUser, false)
@@ -210,6 +272,89 @@ export default function MessagesPage() {
     }
   };
 
+  // Voice recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        setVoiceBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setVoicePreviewUrl(url);
+        // Stop mic tracks
+        for (const track of stream.getTracks()) track.stop();
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch {
+      toast.error("Could not access microphone");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const sendVoiceMessage = async () => {
+    if (!voiceBlob || !selectedUser || !localSession || !extActor) return;
+    setIsSending(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUri = reader.result as string;
+        const text = `${VOICE_PREFIX}${dataUri}`;
+        await extActor.sendDirectMessage(
+          localSession.token,
+          selectedUser,
+          text,
+        );
+        setVoiceBlob(null);
+        if (voicePreviewUrl) {
+          URL.revokeObjectURL(voicePreviewUrl);
+          setVoicePreviewUrl(null);
+        }
+        fetchMessages();
+        fetchConversations();
+        setIsSending(false);
+      };
+      reader.readAsDataURL(voiceBlob);
+    } catch {
+      toast.error("Failed to send voice message");
+      setIsSending(false);
+    }
+  };
+
+  const discardVoice = () => {
+    setVoiceBlob(null);
+    if (voicePreviewUrl) {
+      URL.revokeObjectURL(voicePreviewUrl);
+      setVoicePreviewUrl(null);
+    }
+  };
+
+  // Inbox calling
+  const handleCallUser = async () => {
+    if (!selectedUser || !localSession || !extActor || isCallSending) return;
+    setIsCallSending(true);
+    try {
+      await extActor.sendCallRequestAsLocal(localSession.token, selectedUser);
+      toast.success(`Call request sent to ${selectedDisplayName}`);
+    } catch {
+      toast.error("Failed to send call request");
+    } finally {
+      setTimeout(() => setIsCallSending(false), 2000);
+    }
+  };
+
   const handleLogout = async () => {
     await logoutLocal();
     navigate({ to: "/login" });
@@ -220,6 +365,9 @@ export default function MessagesPage() {
   );
   const selectedDisplayName =
     selectedConvo?.otherDisplayName || selectedUser || "";
+  const isSelectedOnline = selectedUser
+    ? onlineUsernames.has(selectedUser)
+    : false;
 
   return (
     <div
@@ -229,7 +377,7 @@ export default function MessagesPage() {
       <GlobalCallWatcher />
 
       {/* Header */}
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
+      <header className="bg-background border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
             W
@@ -258,7 +406,7 @@ export default function MessagesPage() {
           transition={{ duration: 0.3 }}
           className={`${
             isMobileThread ? "hidden md:flex" : "flex"
-          } flex-col w-full md:w-80 flex-shrink-0 bg-white rounded-2xl border border-border shadow-sm overflow-hidden`}
+          } flex-col w-full md:w-80 flex-shrink-0 bg-card rounded-2xl border border-border shadow-sm overflow-hidden`}
           data-ocid="messages.panel"
         >
           <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
@@ -290,6 +438,7 @@ export default function MessagesPage() {
               conversations.map((convo, idx) => {
                 const isSentByMe =
                   convo.lastMessageSender === localSession?.username;
+                const isOnline = onlineUsernames.has(convo.otherUsername);
                 return (
                   <button
                     key={convo.otherUsername}
@@ -300,15 +449,20 @@ export default function MessagesPage() {
                     }`}
                     data-ocid={`messages.item.${idx + 1}`}
                   >
-                    <Avatar className="h-10 w-10 flex-shrink-0">
-                      <AvatarFallback
-                        className={`bg-gradient-to-br ${getGradient(convo.otherUsername)} text-white text-sm font-semibold`}
-                      >
-                        {(convo.otherDisplayName || convo.otherUsername)
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative flex-shrink-0">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback
+                          className={`bg-gradient-to-br ${getGradient(convo.otherUsername)} text-white text-sm font-semibold`}
+                        >
+                          {(convo.otherDisplayName || convo.otherUsername)
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-card" />
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-sm truncate">
@@ -351,7 +505,7 @@ export default function MessagesPage() {
           transition={{ duration: 0.3 }}
           className={`${
             !isMobileThread && !selectedUser ? "hidden md:flex" : "flex"
-          } flex-col flex-1 bg-white rounded-2xl border border-border shadow-sm overflow-hidden`}
+          } flex-col flex-1 bg-card rounded-2xl border border-border shadow-sm overflow-hidden`}
           data-ocid="messages.card"
         >
           {!selectedUser ? (
@@ -376,14 +530,29 @@ export default function MessagesPage() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback
-                    className={`bg-gradient-to-br ${getGradient(selectedUser)} text-white text-xs font-semibold`}
-                  >
-                    {selectedDisplayName.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
+                <div className="relative">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback
+                      className={`bg-gradient-to-br ${getGradient(selectedUser)} text-white text-xs font-semibold`}
+                    >
+                      {selectedDisplayName.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isSelectedOnline && (
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-card" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate({
+                      to: "/profile",
+                      search: { user: selectedUser } as any,
+                    })
+                  }
+                  className="flex-1 text-left hover:opacity-80 transition-opacity"
+                  data-ocid="messages.link"
+                >
                   <p className="font-semibold text-sm">{selectedDisplayName}</p>
                   {isTyping ? (
                     <p className="text-xs text-primary animate-pulse">
@@ -391,10 +560,25 @@ export default function MessagesPage() {
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      @{selectedUser}
+                      {isSelectedOnline ? "Online" : `@${selectedUser}`}
                     </p>
                   )}
-                </div>
+                </button>
+                {/* Call button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCallUser}
+                  disabled={isCallSending}
+                  className="rounded-full h-9 w-9 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                  data-ocid="messages.primary_button"
+                >
+                  {isCallSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Phone className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
 
               {/* Messages */}
@@ -435,9 +619,7 @@ export default function MessagesPage() {
                                 {msg.senderUsername}
                               </p>
                             )}
-                            <p className="text-sm leading-relaxed">
-                              {msg.text}
-                            </p>
+                            <MessageBubble msg={msg} isMe={isMe} />
                             <div
                               className={`flex items-center gap-1 mt-1 ${
                                 isMe ? "justify-end" : "justify-start"
@@ -469,6 +651,42 @@ export default function MessagesPage() {
                 </div>
               </div>
 
+              {/* Voice preview */}
+              {voicePreviewUrl && (
+                <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    Voice message:
+                  </span>
+                  {/* biome-ignore lint/a11y/useMediaCaption: user-generated */}
+                  <audio
+                    controls
+                    src={voicePreviewUrl}
+                    className="flex-1 h-8"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={sendVoiceMessage}
+                    disabled={isSending}
+                    className="rounded-full h-8 px-3 bg-green-500 hover:bg-green-600 text-white border-0 text-xs"
+                    data-ocid="messages.submit_button"
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Send"
+                    )}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={discardVoice}
+                    className="p-1 rounded-full hover:bg-muted transition-colors"
+                    data-ocid="messages.cancel_button"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
+              )}
+
               {/* Send input */}
               <div className="px-4 py-3 border-t border-border flex items-center gap-2 flex-shrink-0">
                 <Input
@@ -484,6 +702,24 @@ export default function MessagesPage() {
                   className="rounded-full flex-1 border-border"
                   data-ocid="messages.input"
                 />
+                {/* Mic button */}
+                <button
+                  type="button"
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onTouchStart={startRecording}
+                  onTouchEnd={stopRecording}
+                  disabled={!!voicePreviewUrl}
+                  className={`rounded-full h-9 w-9 flex items-center justify-center flex-shrink-0 transition-all ${
+                    isRecording
+                      ? "bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  } disabled:opacity-40`}
+                  title="Hold to record voice message"
+                  data-ocid="messages.upload_button"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
                 <Button
                   size="sm"
                   onClick={handleSend}

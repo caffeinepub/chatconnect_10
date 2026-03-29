@@ -154,7 +154,7 @@ export default function FeedPage() {
       }
     };
     fetchPosts();
-    const interval = setInterval(fetchPosts, 5000);
+    const interval = setInterval(fetchPosts, 3000);
     return () => clearInterval(interval);
   }, [isLocalLoggedIn, actor, localSession]);
 
@@ -421,7 +421,7 @@ export default function FeedPage() {
       <GlobalCallWatcher />
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
-        <header className="bg-white border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
+        <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
               W
@@ -452,7 +452,7 @@ export default function FeedPage() {
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="bg-white rounded-2xl border border-border shadow-sm p-3 mb-5"
+            className="bg-card rounded-2xl border border-border shadow-sm p-3 mb-5"
             data-ocid="feed.panel"
           >
             <h2 className="font-display font-bold text-sm mb-2 bg-gradient-to-r from-purple-600 to-teal-500 bg-clip-text text-transparent">
@@ -526,7 +526,7 @@ export default function FeedPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.25, delay: i * 0.04 }}
-                      className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                      className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden hover:shadow-md transition-shadow"
                       data-ocid={`feed.item.${i + 1}`}
                     >
                       <div className="p-5">
@@ -694,7 +694,7 @@ export default function FeedPage() {
                                               .toUpperCase()}
                                           </AvatarFallback>
                                         </Avatar>
-                                        <div className="flex-1 min-w-0 bg-white rounded-xl px-3 py-2 border border-border/50">
+                                        <div className="flex-1 min-w-0 bg-card rounded-xl px-3 py-2 border border-border/50">
                                           <div className="flex items-center gap-1.5 mb-0.5">
                                             <span className="text-xs font-semibold text-foreground inline-flex items-center gap-1">
                                               {comment.authorName}
@@ -767,7 +767,7 @@ export default function FeedPage() {
                                     })
                                   }
                                   placeholder="Write a reply..."
-                                  className="resize-none min-h-[60px] text-xs rounded-xl border-border bg-white"
+                                  className="resize-none min-h-[60px] text-xs rounded-xl border-border bg-card"
                                   data-ocid="feed.textarea"
                                   onKeyDown={(e) => {
                                     if (

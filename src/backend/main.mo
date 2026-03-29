@@ -30,6 +30,7 @@ actor {
   let directMessages = Map.empty<Nat, DirectMessage>();
   let verifiedUsers = Set.empty<Text>();
   let bannedUsers = Set.empty<Text>();
+  let banExpiry = Map.empty<Text, Time.Time>();
   var nextId = 0;
   var nextTokenId : Nat = 1;
   var nextSignalId : Nat = 0;
@@ -1479,7 +1480,17 @@ actor {
     if (localUser.passwordHash != passwordHash) {
       Runtime.trap("Invalid username or password");
     if (bannedUsers.contains(username)) {
-      Runtime.trap("Your account has been banned by an admin");
+      // Check if ban has expired
+      let stillBanned = switch (banExpiry.get(username)) {
+        case (?expiry) { Time.now() < expiry };
+        case (null) { true };
+      };
+      if (stillBanned) {
+        Runtime.trap("Your account has been banned by an admin");
+      } else {
+        bannedUsers.remove(username);
+        banExpiry.remove(username);
+      };
     };
     };
     let token = nextTokenId;
@@ -1685,7 +1696,20 @@ actor {
   };
 
   public query func isUserBanned(username : Text) : async Bool {
-    bannedUsers.contains(username);
+    if (not bannedUsers.contains(username)) { return false };
+    // Check if ban has expired
+    switch (banExpiry.get(username)) {
+      case (?expiry) {
+        if (Time.now() >= expiry) {
+          false // Expired - frontend should call unban
+        } else { true }
+      };
+      case (null) { true }; // Indefinite ban
+    };
+  };
+
+  public query func getBanExpiry(username : Text) : async ?Time.Time {
+    banExpiry.get(username);
   };
 
   public shared func grantVerifiedBadge(token : SessionToken, targetUsername : Text) : async () {
@@ -1722,11 +1746,35 @@ actor {
     };
   };
 
+  // Ban with duration in nanoseconds (0 = indefinite)
+  public shared func banLocalUserWithDuration(token : SessionToken, targetUsername : Text, durationNs : Nat) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can ban users");
+    };
+    if (targetUsername == "WILDFIRE") {
+      Runtime.trap("Cannot ban the admin account");
+    };
+    if (not localUsers.containsKey(targetUsername)) {
+      Runtime.trap("User not found");
+    };
+    bannedUsers.add(targetUsername);
+    if (durationNs > 0) {
+      banExpiry.add(targetUsername, Time.now() + durationNs);
+    } else {
+      banExpiry.remove(targetUsername);
+    };
+    // Invalidate all sessions for this user
+    for ((t, u) in sessions.entries().toArray().values()) {
+      if (u == targetUsername) { sessions.remove(t) };
+    };
+  };
+
   public shared func unbanLocalUser(token : SessionToken, targetUsername : Text) : async () {
     if (not isWildfireToken(token)) {
       Runtime.trap("Unauthorized: Only the admin can unban users");
     };
     bannedUsers.remove(targetUsername);
+    banExpiry.remove(targetUsername);
   };
 
   public type AdminUserInfo = {
@@ -1734,6 +1782,7 @@ actor {
     displayName : Text;
     isVerified : Bool;
     isBanned : Bool;
+    banExpiresAt : ?Time.Time;
   };
 
   public query func getAllUsersForAdmin(token : SessionToken) : async [AdminUserInfo] {
@@ -1747,6 +1796,7 @@ actor {
           displayName = user.displayName;
           isVerified = verifiedUsers.contains(username);
           isBanned = bannedUsers.contains(username);
+          banExpiresAt = banExpiry.get(username);
         };
       }
     );
