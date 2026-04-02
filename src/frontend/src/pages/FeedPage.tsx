@@ -8,20 +8,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronUp,
   Crown,
+  Flame,
   Heart,
   Loader2,
   LogOut,
   MessageCircle,
-  Newspaper,
   Send,
   Trash2,
-  UserCircle,
-  Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,6 +31,7 @@ import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useLocalAuth } from "../hooks/useLocalAuth";
 import { useCreatePost, useGetPosts } from "../hooks/useQueries";
+import { playLikeSound } from "../utils/sounds";
 
 type ActorExt = {
   getPostsAsLocal(token: SessionToken): Promise<Post[]>;
@@ -67,6 +66,8 @@ const AVATAR_GRADIENTS = [
   "from-emerald-400 to-teal-500",
   "from-rose-400 to-purple-500",
 ];
+
+const LANGUAGE_FILTERS = ["All", "English", "Hindi", "Bengali", "Punjabi"];
 
 function getGradient(str: string) {
   let hash = 0;
@@ -127,8 +128,10 @@ export default function FeedPage() {
   const [localPosts, setLocalPosts] = useState<Post[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [postStates, setPostStates] = useState<Record<string, PostState>>({});
-
+  const [selectedLanguage, setSelectedLanguage] = useState("All");
   const [verifiedUsers, setVerifiedUsers] = useState<Set<string>>(new Set());
+
+  const isFetchingRef = useRef(false);
 
   const { data: iiPosts = [] } = useGetPosts();
   const createPostII = useCreatePost();
@@ -142,16 +145,20 @@ export default function FeedPage() {
     }
   }, [sessionValidated, identity, isLocalLoggedIn, navigate]);
 
-  // Fetch local posts via polling
+  // Fetch local posts via polling with overlap guard
   useEffect(() => {
     if (!isLocalLoggedIn || !actor || !localSession) return;
     const a = actor as unknown as ActorExt;
     const fetchPosts = async () => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
       try {
         const posts = await a.getPostsAsLocal(localSession.token);
         setLocalPosts(posts);
       } catch {
         // ignore
+      } finally {
+        isFetchingRef.current = false;
       }
     };
     fetchPosts();
@@ -200,6 +207,18 @@ export default function FeedPage() {
   const sortedPosts = [...posts].sort((a, b) =>
     a.timestamp > b.timestamp ? -1 : 1,
   );
+
+  // Compute trending posts: top 3 by likes in last 24h
+  const now = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const trendingPosts = [...sortedPosts]
+    .filter((p) => now - Number(p.timestamp / 1_000_000n) < oneDayMs)
+    .sort((a, b) => {
+      const aLikes = postStates[a.id.toString()]?.likes.length ?? 0;
+      const bLikes = postStates[b.id.toString()]?.likes.length ?? 0;
+      return bLikes - aLikes;
+    })
+    .slice(0, 3);
 
   const getOrInitPostState = useCallback(
     (postId: string): PostState => postStates[postId] ?? defaultPostState(),
@@ -267,12 +286,14 @@ export default function FeedPage() {
           await a.unlikePostAsLocal(localSession.token, postId);
         } else {
           await a.likePostAsLocal(localSession.token, postId);
+          playLikeSound();
         }
       } else {
         if (wasLiked) {
           await a.unlikePost(postId);
         } else {
           await a.likePost(postId);
+          playLikeSound();
         }
       }
       await loadLikes(postId);
@@ -417,6 +438,16 @@ export default function FeedPage() {
 
   const currentDisplayName = isLocalLoggedIn ? localSession?.displayName : "";
 
+  // Filter posts by language (client-side — no backend needed)
+  const displayedPosts =
+    selectedLanguage === "All"
+      ? sortedPosts
+      : sortedPosts.filter(
+          (p) =>
+            (p as any).language === selectedLanguage ||
+            (p as any).authorLanguage === selectedLanguage,
+        );
+
   return (
     <TooltipProvider>
       <GlobalCallWatcher />
@@ -457,7 +488,7 @@ export default function FeedPage() {
           >
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm font-semibold text-foreground">
-                🎙️ Voice Rooms
+                🎤 Voice Rooms
               </span>
               <span className="text-xs text-muted-foreground">Tap to join</span>
             </div>
@@ -514,6 +545,103 @@ export default function FeedPage() {
             </div>
           </motion.div>
 
+          {/* Trending Posts */}
+          {trendingPosts.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="mb-5"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Flame className="h-4 w-4 text-orange-500" />
+                <span className="text-sm font-semibold text-foreground">
+                  Trending
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Top posts in last 24h
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {trendingPosts.map((post, i) => (
+                  <div
+                    key={post.id.toString()}
+                    className="bg-card border border-border rounded-xl px-4 py-3 flex items-start gap-3"
+                    data-ocid={`feed.item.${i + 1}`}
+                  >
+                    <span className="text-orange-500 font-bold text-sm flex-shrink-0 mt-0.5">
+                      #{i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate({
+                            to: "/profile",
+                            search: { user: post.authorName } as any,
+                          })
+                        }
+                        className="text-xs font-semibold text-foreground hover:underline inline-flex items-center gap-1"
+                        data-ocid="feed.link"
+                      >
+                        {post.authorName}
+                        {verifiedUsers.has(post.authorName) && (
+                          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 flex-shrink-0">
+                            <svg
+                              role="img"
+                              aria-label="verified"
+                              viewBox="0 0 12 12"
+                              className="w-2 h-2"
+                            >
+                              <polyline
+                                points="2,6 5,9 10,3"
+                                fill="none"
+                                stroke="white"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {post.text.slice(0, 80)}
+                        {post.text.length > 80 ? "\u2026" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 text-rose-500 text-xs font-semibold flex-shrink-0">
+                      <Heart className="h-3 w-3" fill="currentColor" />
+                      {postStates[post.id.toString()]?.likes.length ?? 0}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Language Filter */}
+          <div
+            className="flex gap-2 overflow-x-auto pb-2 mb-4"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {LANGUAGE_FILTERS.map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setSelectedLanguage(lang)}
+                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                  selectedLanguage === lang
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                }`}
+                data-ocid="feed.tab"
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
+
           {/* Composer */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -565,7 +693,7 @@ export default function FeedPage() {
           {/* Posts */}
           <div className="space-y-4">
             <AnimatePresence initial={false}>
-              {sortedPosts.length === 0 ? (
+              {displayedPosts.length === 0 ? (
                 <motion.div
                   key="empty"
                   initial={{ opacity: 0 }}
@@ -582,7 +710,7 @@ export default function FeedPage() {
                   </p>
                 </motion.div>
               ) : (
-                sortedPosts.map((post, i) => {
+                displayedPosts.map((post, i) => {
                   const key = post.id.toString();
                   const ps = getOrInitPostState(key);
                   const isAuthor = post.authorName === currentDisplayName;
@@ -650,7 +778,8 @@ export default function FeedPage() {
                                     </svg>
                                   </span>
                                 )}
-                                {post.authorName === "WILDFIRE" && (
+                                {post.authorName.toUpperCase() ===
+                                  "WILDFIRE" && (
                                   <Crown className="h-3 w-3 text-amber-400 flex-shrink-0" />
                                 )}
                               </button>
@@ -751,7 +880,7 @@ export default function FeedPage() {
                             transition={{ duration: 0.2 }}
                             className="overflow-hidden"
                           >
-                            <div className="border-t border-border/60 bg-gray-50/60 px-5 py-4">
+                            <div className="border-t border-border/60 bg-muted/30 px-5 py-4">
                               {/* Comments list */}
                               {ps.commentsLoading ? (
                                 <div
@@ -808,7 +937,7 @@ export default function FeedPage() {
                                                   </svg>
                                                 </span>
                                               )}
-                                              {comment.authorName ===
+                                              {comment.authorName.toUpperCase() ===
                                                 "WILDFIRE" && (
                                                 <Crown className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />
                                               )}

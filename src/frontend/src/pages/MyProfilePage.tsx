@@ -27,7 +27,6 @@ import {
   Eye,
   Headphones,
   LogOut,
-  Moon,
   Pencil,
   Save,
   Settings,
@@ -60,6 +59,8 @@ const STATUS_OPTIONS = [
   { value: "Do Not Disturb", label: "Do Not Disturb", color: "bg-gray-400" },
 ];
 
+const LANGUAGE_OPTIONS = ["English", "Hindi", "Bengali", "Punjabi"];
+
 function statusColor(status: string): string {
   const found = STATUS_OPTIONS.find((s) => s.value === status);
   return found?.color ?? "bg-gray-300";
@@ -89,6 +90,9 @@ export default function MyProfilePage() {
   const [editBio, setEditBio] = useState("");
   const [bio, setBio] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Language preferences
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
 
   // Photo state
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -138,7 +142,7 @@ export default function MyProfilePage() {
         );
         if (found) {
           setViewedUserProfile(found);
-          setViewedUserIsAdmin(found.username === "WILDFIRE");
+          setViewedUserIsAdmin(found.username.toUpperCase() === "WILDFIRE");
           Promise.all([
             extActor.getUserBio(found.username).catch(() => ""),
             extActor.getUserStatus(found.username).catch(() => ""),
@@ -210,6 +214,19 @@ export default function MyProfilePage() {
       .catch(() => {});
   }, [isLocalLoggedIn, extActor, localSession]);
 
+  // Load saved languages from localStorage (no backend method exists)
+  useEffect(() => {
+    if (!localSession) return;
+    const saved = localStorage.getItem(`languages_${localSession.username}`);
+    if (saved) {
+      try {
+        setSelectedLanguages(JSON.parse(saved));
+      } catch {
+        // ignore
+      }
+    }
+  }, [localSession]);
+
   const handleStatusChange = async (value: string) => {
     setCurrentStatus(value);
     if (!extActor || !localSession) return;
@@ -259,6 +276,11 @@ export default function MyProfilePage() {
       }
       await extActor.updateLocalUserBio(localSession.token, editBio);
       setBio(editBio);
+      // Save languages to localStorage
+      localStorage.setItem(
+        `languages_${localSession.username}`,
+        JSON.stringify(selectedLanguages),
+      );
       toast.success("Profile updated!");
       if (profile) {
         setProfile({
@@ -333,6 +355,12 @@ export default function MyProfilePage() {
     }
   };
 
+  const toggleLanguage = (lang: string) => {
+    setSelectedLanguages((prev) =>
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang],
+    );
+  };
+
   const displayName = profile?.displayName ?? localSession?.displayName ?? "";
   const username = localSession?.username ?? "";
   const age = profile?.age ?? null;
@@ -356,7 +384,7 @@ export default function MyProfilePage() {
       vp.username.slice(0, 2).toUpperCase();
     const vpGradient = "from-purple-500 to-teal-400";
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-background dark:via-background dark:to-background flex flex-col">
+      <div className="min-h-screen bg-background flex flex-col">
         <GlobalCallWatcher />
         <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3">
@@ -376,7 +404,7 @@ export default function MyProfilePage() {
               <div className="h-24 bg-gradient-to-r from-purple-500 via-indigo-500 to-teal-400" />
               <div className="px-6 pb-6">
                 <div className="flex items-end justify-between -mt-12 mb-4">
-                  <Avatar className="w-20 h-20 border-4 border-white shadow-md">
+                  <Avatar className="w-20 h-20 border-4 border-card shadow-md">
                     {vpPhoto && (
                       <AvatarImage src={vpPhoto} alt={vp.displayName} />
                     )}
@@ -389,7 +417,9 @@ export default function MyProfilePage() {
                 </div>
                 <div className="space-y-1 mb-4">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl font-bold">{vp.displayName}</h2>
+                    <h2 className="text-xl font-bold text-foreground">
+                      {vp.displayName}
+                    </h2>
                     {viewedUserVerified && (
                       <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 flex-shrink-0">
                         <svg
@@ -436,7 +466,10 @@ export default function MyProfilePage() {
                   <Button
                     className="flex-1 bg-gradient-to-r from-purple-500 to-teal-400 text-white border-0"
                     onClick={() => {
-                      window.location.href = `/messages?user=${encodeURIComponent(vp.username)}`;
+                      navigate({
+                        to: "/messages",
+                        search: { user: vp.username } as any,
+                      });
                     }}
                   >
                     Message
@@ -452,7 +485,7 @@ export default function MyProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-background dark:via-background dark:to-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <GlobalCallWatcher />
 
       {/* Hidden file input */}
@@ -487,6 +520,26 @@ export default function MyProfilePage() {
 
       <main className="flex-1 flex items-start justify-center px-4 py-10 pb-28">
         <div className="w-full max-w-md">
+          {/* WILDFIRE Admin Gold Banner */}
+          {isAdmin && (
+            <div className="mb-4 rounded-2xl overflow-hidden bg-gradient-to-r from-amber-400 via-orange-500 to-yellow-400 p-4 shadow-lg shadow-amber-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-2xl">
+                  👑
+                </div>
+                <div>
+                  <p className="text-white font-black text-lg tracking-tight">
+                    WILDFIRE Admin
+                  </p>
+                  <p className="text-white/80 text-xs">
+                    Wave Chat Administrator
+                  </p>
+                </div>
+                <Crown className="h-8 w-8 text-white/70 ml-auto" />
+              </div>
+            </div>
+          )}
+
           {/* Profile Card */}
           <div className="bg-card rounded-2xl shadow-lg overflow-hidden">
             {/* Banner */}
@@ -504,7 +557,7 @@ export default function MyProfilePage() {
                   aria-label="Change profile picture"
                   data-ocid="profile.upload_button"
                 >
-                  <Avatar className="w-20 h-20 border-4 border-white shadow-md">
+                  <Avatar className="w-20 h-20 border-4 border-card shadow-md">
                     {photoUrl && (
                       <AvatarImage src={photoUrl} alt={displayName} />
                     )}
@@ -521,7 +574,7 @@ export default function MyProfilePage() {
                     )}
                   </div>
                   {/* Small camera badge */}
-                  <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
+                  <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-purple-500 border-2 border-card flex items-center justify-center">
                     <Camera className="h-3 w-3 text-white" />
                   </div>
                 </button>
@@ -614,6 +667,27 @@ export default function MyProfilePage() {
                       {editBio.length}/150
                     </p>
                   </div>
+                  {/* Language preferences */}
+                  <div className="space-y-1.5">
+                    <Label>Languages I speak</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {LANGUAGE_OPTIONS.map((lang) => (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => toggleLanguage(lang)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                            selectedLanguages.includes(lang)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          }`}
+                          data-ocid="profile.toggle"
+                        >
+                          {lang}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -638,6 +712,18 @@ export default function MyProfilePage() {
                     <p className="text-sm text-foreground mt-2 leading-relaxed">
                       {bio}
                     </p>
+                  )}
+                  {selectedLanguages.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {selectedLanguages.map((lang) => (
+                        <span
+                          key={lang}
+                          className="px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary border border-primary/20 font-medium"
+                        >
+                          {lang}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -697,17 +783,6 @@ export default function MyProfilePage() {
 
               {/* Stats */}
               <div className="mt-6 pt-5 border-t border-border space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
-                    <span className="font-semibold text-purple-700 dark:text-purple-300">
-                      Total Calls:
-                    </span>
-                    <span className="text-purple-600 dark:text-purple-400 font-bold">
-                      0
-                    </span>
-                  </div>
-                </div>
-
                 {/* Profile Views */}
                 <div>
                   <button

@@ -1,3 +1,4 @@
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Crown,
   Loader2,
@@ -17,6 +18,7 @@ import {
   Phone,
   PhoneCall,
   PhoneMissed,
+  Search,
   ShieldOff,
   UserCheck,
   UserPlus,
@@ -44,6 +46,7 @@ import {
   useSendCallRequest,
   useSendCallRequestAsLocal,
 } from "../hooks/useQueries";
+import { playFollowSound } from "../utils/sounds";
 
 const AVATAR_GRADIENTS = [
   "from-purple-500 to-indigo-600",
@@ -52,6 +55,8 @@ const AVATAR_GRADIENTS = [
   "from-emerald-400 to-teal-500",
   "from-rose-400 to-purple-500",
 ];
+
+const LANGUAGE_FILTERS = ["All", "English", "Hindi", "Bengali", "Punjabi"];
 
 function getGradient(str: string) {
   let hash = 0;
@@ -66,6 +71,7 @@ function CallingCard({
   myPrincipal,
 }: { user: User; index: number; myPrincipal: Principal | undefined }) {
   const sendCallRequest = useSendCallRequest();
+  const navigate = useNavigate();
   const isMe =
     myPrincipal && user.principal.toString() === myPrincipal.toString();
 
@@ -120,9 +126,25 @@ function CallingCard({
         <div className="w-full flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => {
-              window.location.href = `/messages?user=${encodeURIComponent(user.fname || user.name || "")}`;
-            }}
+            onClick={() =>
+              navigate({
+                to: "/profile",
+                search: { user: user.fname || user.name || "" } as any,
+              })
+            }
+            className="w-full py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            data-ocid={`cards.secondary_button.${index + 1}`}
+          >
+            View Profile
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              navigate({
+                to: "/messages",
+                search: { user: user.fname || user.name || "" } as any,
+              })
+            }
             className="w-full py-2 rounded-full bg-primary/80 text-white text-sm font-semibold hover:bg-primary transition-colors flex items-center justify-center gap-2"
             data-ocid={`cards.secondary_button.${index + 1}`}
           >
@@ -187,7 +209,7 @@ function LocalCallingCard({
   const [editTopicOpen, setEditTopicOpen] = useState(false);
   const [topicInput, setTopicInput] = useState("");
   const [savingTopic, setSavingTopic] = useState(false);
-  const isWildfireAdmin = user.username === "WILDFIRE";
+  const isWildfireAdmin = user.username.toUpperCase() === "WILDFIRE";
 
   // Load initial follow/block state and follower counts
   useEffect(() => {
@@ -214,7 +236,7 @@ function LocalCallingCard({
     });
   }, [extActor, token, user.username, isMe]);
 
-  // Load bio + verified status + custom status
+  // Load bio + verified status + custom status + call topic (batched)
   useEffect(() => {
     if (!extActor || !user.username) return;
     let cancelled = false;
@@ -252,6 +274,7 @@ function LocalCallingCard({
       } else {
         await extActor.followUser(token, user.username);
         setIsFollowing(true);
+        playFollowSound();
         toast.success(`Following ${user.displayName}!`);
       }
     } catch {
@@ -291,28 +314,48 @@ function LocalCallingCard({
     >
       <div className="flex flex-col items-center text-center">
         <div className="relative mb-4">
-          {user.photo ? (
-            <img
-              src={user.photo.getDirectURL()}
-              alt={user.displayName}
-              className="w-20 h-20 rounded-full object-cover border-4 border-white/20"
-            />
-          ) : (
-            <div
-              className={`w-20 h-20 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-2xl font-bold`}
-            >
-              {user.displayName.slice(0, 2).toUpperCase()}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() =>
+              navigate({
+                to: "/profile",
+                search: { user: user.username } as any,
+              })
+            }
+            className="focus:outline-none"
+          >
+            {user.photo ? (
+              <img
+                src={user.photo.getDirectURL()}
+                alt={user.displayName}
+                className="w-20 h-20 rounded-full object-cover border-4 border-white/20 hover:opacity-90 transition-opacity"
+              />
+            ) : (
+              <div
+                className={`w-20 h-20 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-2xl font-bold hover:opacity-90 transition-opacity`}
+              >
+                {user.displayName.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </button>
           {isOnline && (
             <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0B102A]" />
           )}
         </div>
 
         <div className="flex items-center gap-1.5 justify-center mb-1">
-          <h3 className="font-display font-semibold text-lg">
+          <button
+            type="button"
+            onClick={() =>
+              navigate({
+                to: "/profile",
+                search: { user: user.username } as any,
+              })
+            }
+            className="font-display font-semibold text-lg hover:underline focus:outline-none"
+          >
             {user.displayName}
-          </h3>
+          </button>
           {isVerified && (
             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 flex-shrink-0 shadow-sm shadow-blue-500/50">
               <svg
@@ -640,6 +683,10 @@ export default function CallingCardsPage() {
   const denyCall = useDenyCallRequestAsLocal();
   const sendCallRequestAsLocal = useSendCallRequestAsLocal();
 
+  // Search + language filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("All");
+
   // Incoming pending requests (someone calling me)
   const incomingRequests = callRequests.filter(
     (cr) =>
@@ -670,8 +717,29 @@ export default function CallingCardsPage() {
   }, [identity, profileLoading, myProfile, navigate]);
 
   const myPrincipal = identity?.getPrincipal();
-  const totalCount = users.length + localUsers.length;
   const isLoading = usersLoading || localUsersLoading;
+
+  // Filter localUsers by search + language
+  const filteredLocalUsers = localUsers.filter((u) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.username.toLowerCase().includes(searchQuery.toLowerCase());
+    // Language filter is client-side; just check if any language prop exists
+    const matchesLang =
+      selectedLanguage === "All" ||
+      (u as any).languages?.includes(selectedLanguage) ||
+      (u as any).language === selectedLanguage;
+    return matchesSearch && matchesLang;
+  });
+
+  const filteredUsers = users.filter((u) => {
+    if (searchQuery === "") return true;
+    const name = u.fname || u.name || "";
+    return name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const totalCount = filteredUsers.length + filteredLocalUsers.length;
 
   const handleLocalCall = async (targetUsername: string) => {
     if (!localSession) return;
@@ -790,15 +858,50 @@ export default function CallingCardsPage() {
           })}
         </AnimatePresence>
 
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-4">
           <div>
             <h1 className="font-display font-bold text-3xl text-foreground">
               Calling Cards
             </h1>
             <p className="text-muted-foreground">
-              {totalCount} people in the community
+              {localUsers.length + users.length} people in the community
             </p>
           </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name or username..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground placeholder:text-muted-foreground"
+            data-ocid="cards.search_input"
+          />
+        </div>
+
+        {/* Language filter chips */}
+        <div
+          className="flex gap-2 overflow-x-auto pb-2 mb-6"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {LANGUAGE_FILTERS.map((lang) => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => setSelectedLanguage(lang)}
+              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                selectedLanguage === lang
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+              data-ocid="cards.tab"
+            >
+              {lang}
+            </button>
+          ))}
         </div>
 
         {isLoading ? (
@@ -812,19 +915,13 @@ export default function CallingCardsPage() {
           <div className="text-center py-24" data-ocid="cards.empty_state">
             <div className="text-6xl mb-4">👥</div>
             <h3 className="font-display font-semibold text-2xl text-foreground mb-2">
-              No community members yet
+              {searchQuery ? "No results found" : "No community members yet"}
             </h3>
-            <p className="text-muted-foreground mb-6">
-              Be the first! Sign up and create your calling card.
+            <p className="text-muted-foreground">
+              {searchQuery
+                ? `No users match "${searchQuery}"`
+                : "Be the first! Sign up and create your calling card."}
             </p>
-            <Link to="/signup">
-              <Button
-                className="rounded-full px-8 btn-orange"
-                data-ocid="cards.primary_button"
-              >
-                Join WaveChat
-              </Button>
-            </Link>
           </div>
         ) : (
           <div className="relative">
@@ -833,7 +930,7 @@ export default function CallingCardsPage() {
               className="flex gap-5 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-4 px-2"
               style={{ scrollbarWidth: "none" }}
             >
-              {users.map((user, i) => (
+              {filteredUsers.map((user, i) => (
                 <div
                   key={user.principal.toString()}
                   className="flex-shrink-0 w-72 snap-center"
@@ -845,7 +942,7 @@ export default function CallingCardsPage() {
                   />
                 </div>
               ))}
-              {localUsers.map((user, i) => {
+              {filteredLocalUsers.map((user, i) => {
                 const pendingOutgoing = callRequests.find(
                   (cr) =>
                     cr.callerUsername === localSession?.username &&
@@ -859,7 +956,7 @@ export default function CallingCardsPage() {
                   >
                     <LocalCallingCard
                       user={user}
-                      index={users.length + i}
+                      index={filteredUsers.length + i}
                       myUsername={localSession?.username || ""}
                       hasPendingOutgoing={!!pendingOutgoing}
                       onCall={() => handleLocalCall(user.username)}

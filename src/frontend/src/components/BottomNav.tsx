@@ -8,10 +8,21 @@ import {
   Phone,
   UserCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { backendInterface as ExtendedBackend } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 import { useLocalAuth } from "../hooks/useLocalAuth";
+import { vibrateLong, vibrateShort } from "../utils/haptics";
+import {
+  requestNotificationPermission,
+  showCallNotification,
+  showMessageNotification,
+} from "../utils/pushNotifications";
+import {
+  playCallIncomingSound,
+  playMessageSound,
+  stopCallIncomingSound,
+} from "../utils/sounds";
 
 export function BottomNav() {
   const navigate = useNavigate();
@@ -22,11 +33,25 @@ export function BottomNav() {
 
   // Unread messages
   const [unreadCount, setUnreadCount] = useState(0);
+  const prevUnreadRef = useRef(0);
+
   const fetchUnread = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession || !extActor) return;
     try {
       const count = await extActor.getUnreadDMCount(localSession.token);
-      setUnreadCount(Number(count));
+      const newCount = Number(count);
+      // If new messages arrived, play sound + haptic + push notification
+      if (newCount > prevUnreadRef.current && prevUnreadRef.current >= 0) {
+        playMessageSound();
+        vibrateShort();
+        // Try to show push notification
+        showMessageNotification(
+          "Wave Chat",
+          `You have ${newCount} unread message${newCount > 1 ? "s" : ""}`,
+        );
+      }
+      prevUnreadRef.current = newCount;
+      setUnreadCount(newCount);
     } catch {
       // silently ignore
     }
@@ -42,6 +67,7 @@ export function BottomNav() {
   useEffect(() => {
     if (location.pathname === "/messages") {
       setUnreadCount(0);
+      prevUnreadRef.current = 0;
     }
   }, [location.pathname]);
 
@@ -72,6 +98,13 @@ export function BottomNav() {
     }
   }, [location.pathname]);
 
+  // Request notification permission once on mount
+  useEffect(() => {
+    if (isLocalLoggedIn) {
+      requestNotificationPermission().catch(() => {});
+    }
+  }, [isLocalLoggedIn]);
+
   // Presence heartbeat
   useEffect(() => {
     if (!isLocalLoggedIn || !localSession || !extActor) return;
@@ -85,6 +118,9 @@ export function BottomNav() {
 
   // Detect incoming calls for pulsing ring on Calls button
   const [hasIncomingCall, setHasIncomingCall] = useState(false);
+  const prevHasCallRef = useRef(false);
+  const [_callerNameForNotif, setCallerNameForNotif] = useState("");
+
   useEffect(() => {
     if (!isLocalLoggedIn || !localSession || !extActor) return;
     const checkIncoming = async () => {
@@ -92,19 +128,36 @@ export function BottomNav() {
         const reqs = await (extActor as any).getCallRequestsAsLocal(
           localSession.token,
         );
-        const pending = reqs.some(
+        const incoming = reqs.find(
           (r: any) =>
             r.calleeUsername === localSession.username &&
             r.status === "pending",
         );
-        setHasIncomingCall(pending);
+        const hasCall = !!incoming;
+
+        if (hasCall && !prevHasCallRef.current) {
+          // New incoming call
+          vibrateLong();
+          playCallIncomingSound();
+          const name = incoming.callerUsername || "Someone";
+          setCallerNameForNotif(name);
+          showCallNotification(name);
+        } else if (!hasCall && prevHasCallRef.current) {
+          stopCallIncomingSound();
+        }
+
+        prevHasCallRef.current = hasCall;
+        setHasIncomingCall(hasCall);
       } catch {
         // ignore
       }
     };
     checkIncoming();
     const interval = setInterval(checkIncoming, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      stopCallIncomingSound();
+    };
   }, [isLocalLoggedIn, localSession, extActor]);
 
   const isActive = (path: string) => location.pathname === path;

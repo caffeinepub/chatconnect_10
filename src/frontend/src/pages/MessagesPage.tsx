@@ -13,6 +13,7 @@ import {
   Mic,
   Phone,
   Send,
+  Trash2,
   Video,
   X,
 } from "lucide-react";
@@ -55,7 +56,17 @@ function relativeTime(timestamp: bigint): string {
 
 const VOICE_PREFIX = "[VOICE]:";
 
-function MessageBubble({ msg, isMe }: { msg: DirectMessage; isMe: boolean }) {
+function MessageBubble({
+  msg,
+  isMe,
+  onDelete,
+  canDelete,
+}: {
+  msg: DirectMessage;
+  isMe: boolean;
+  onDelete?: () => void;
+  canDelete?: boolean;
+}) {
   const isVoice = msg.text.startsWith(VOICE_PREFIX);
   const voiceSrc = isVoice ? msg.text.slice(VOICE_PREFIX.length) : null;
 
@@ -71,14 +82,29 @@ function MessageBubble({ msg, isMe }: { msg: DirectMessage; isMe: boolean }) {
     );
   }
 
-  return <p className="text-sm leading-relaxed">{msg.text}</p>;
+  return (
+    <div className="group relative">
+      <p className="text-sm leading-relaxed">{msg.text}</p>
+      {canDelete && onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center"
+          aria-label="Delete message"
+          data-ocid="messages.delete_button"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function MessagesPage() {
   const navigate = useNavigate();
   const { localSession, isLocalLoggedIn, logoutLocal, sessionValidated } =
     useLocalAuth();
-  const { actor } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -86,6 +112,7 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  // isLoadingConvos stays true until actor is ready AND first fetch completes
   const [isLoadingConvos, setIsLoadingConvos] = useState(true);
   const [isMobileThread, setIsMobileThread] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -93,8 +120,12 @@ export default function MessagesPage() {
     new Set(),
   );
   const [isCallSending, setIsCallSending] = useState(false);
+  const [pinnedMessage, setPinnedMessage] = useState<DirectMessage | null>(
+    null,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actorReadyRef = useRef(false);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -109,6 +140,13 @@ export default function MessagesPage() {
       navigate({ to: "/login" });
     }
   }, [sessionValidated, isLocalLoggedIn, navigate]);
+
+  // Track when actor becomes available
+  useEffect(() => {
+    if (extActor && !actorFetching) {
+      actorReadyRef.current = true;
+    }
+  }, [extActor, actorFetching]);
 
   // Check URL param for pre-selected user
   useEffect(() => {
@@ -137,11 +175,11 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [fetchOnline]);
 
-  // Fetch conversations — keep loading state true until actor is ready
+  // Fetch conversations — wait for actor to be ready before starting, keep loading true until then
   const fetchConversations = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession) return;
-    if (!extActor) {
-      // Actor not ready yet; keep loading state until actor becomes available
+    if (!extActor || actorFetching) {
+      // Actor not ready; keep loading state until it becomes available
       return;
     }
     try {
@@ -154,13 +192,18 @@ export default function MessagesPage() {
     } finally {
       setIsLoadingConvos(false);
     }
-  }, [isLocalLoggedIn, localSession, extActor]);
+  }, [isLocalLoggedIn, localSession, extActor, actorFetching]);
 
+  // Keep loading until actor is ready, then fetch
   useEffect(() => {
+    if (!extActor || actorFetching) {
+      setIsLoadingConvos(true);
+      return;
+    }
     fetchConversations();
     const interval = setInterval(fetchConversations, 3_000);
     return () => clearInterval(interval);
-  }, [fetchConversations]);
+  }, [fetchConversations, extActor, actorFetching]);
 
   // Fetch messages
   const fetchMessages = useCallback(async () => {
@@ -214,6 +257,17 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
 
+  // Load pinned message
+  useEffect(() => {
+    if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
+    (extActor as any)
+      .getPinnedMessage?.(localSession.token, selectedUser)
+      .then((msg: DirectMessage | null) => {
+        if (msg) setPinnedMessage(msg);
+      })
+      .catch(() => {});
+  }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
+
   // Clean up voice preview URL on unmount
   useEffect(() => {
     return () => {
@@ -240,6 +294,7 @@ export default function MessagesPage() {
     setIsMobileThread(true);
     setMessages([]);
     setIsTyping(false);
+    setPinnedMessage(null);
     setVoiceBlob(null);
     if (voicePreviewUrl) {
       URL.revokeObjectURL(voicePreviewUrl);
@@ -268,13 +323,41 @@ export default function MessagesPage() {
     setIsSending(true);
     try {
       await extActor.sendDirectMessage(localSession.token, selectedUser, text);
-      fetchMessages();
+      // Immediately fetch to replace optimistic with real message
+      await fetchMessages();
       fetchConversations();
     } catch {
+      // Remove optimistic message on failure
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setMessageText(text);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: bigint) => {
+    if (!localSession || !extActor) return;
+    try {
+      await (extActor as any).deleteDirectMessage?.(localSession.token, msgId);
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    } catch {
+      // Ignore if API not available
+    }
+  };
+
+  const handlePinMessage = async (msgId: bigint) => {
+    if (!selectedUser || !localSession || !extActor) return;
+    try {
+      await (extActor as any).pinDirectMessage?.(
+        localSession.token,
+        selectedUser,
+        msgId,
+      );
+      const msg = messages.find((m) => m.id === msgId);
+      if (msg) setPinnedMessage(msg);
+      toast.success("Message pinned");
+    } catch {
+      // Ignore if API not available
     }
   };
 
@@ -328,7 +411,7 @@ export default function MessagesPage() {
           URL.revokeObjectURL(voicePreviewUrl);
           setVoicePreviewUrl(null);
         }
-        fetchMessages();
+        await fetchMessages();
         fetchConversations();
         setIsSending(false);
       };
@@ -609,6 +692,20 @@ export default function MessagesPage() {
                 </Button>
               </div>
 
+              {/* Pinned message banner */}
+              {pinnedMessage && (
+                <div className="px-4 py-2 bg-primary/5 border-b border-border/60 flex items-start gap-2">
+                  <span className="text-xs text-primary font-semibold flex-shrink-0 mt-0.5">
+                    📌
+                  </span>
+                  <p className="text-xs text-muted-foreground truncate flex-1">
+                    {pinnedMessage.text.startsWith(VOICE_PREFIX)
+                      ? "Voice message"
+                      : pinnedMessage.text}
+                  </p>
+                </div>
+              )}
+
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
                 <div className="flex flex-col gap-3">
@@ -647,12 +744,27 @@ export default function MessagesPage() {
                                 {msg.senderUsername}
                               </p>
                             )}
-                            <MessageBubble msg={msg} isMe={isMe} />
+                            <MessageBubble
+                              msg={msg}
+                              isMe={isMe}
+                              canDelete={isMe}
+                              onDelete={() => handleDeleteMessage(msg.id)}
+                            />
                             <div
                               className={`flex items-center gap-1 mt-1 ${
                                 isMe ? "justify-end" : "justify-start"
                               }`}
                             >
+                              {!isMe && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePinMessage(msg.id)}
+                                  className="text-[10px] text-muted-foreground/60 hover:text-primary transition-colors mr-1"
+                                  title="Pin message"
+                                >
+                                  📌
+                                </button>
+                              )}
                               <p
                                 className={`text-[10px] ${
                                   isMe
