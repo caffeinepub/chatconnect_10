@@ -141,8 +141,7 @@ export default function MessagesPage() {
   const fetchConversations = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession) return;
     if (!extActor) {
-      // Actor not ready yet; mark loading done to avoid stuck state
-      setIsLoadingConvos(false);
+      // Actor not ready yet; keep loading state until actor becomes available
       return;
     }
     try {

@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   LogOut,
   Mic,
@@ -58,6 +58,17 @@ function getGradient(str: string) {
 
 export default function LobbyPage() {
   const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { room?: string };
+  const roomName = search.room
+    ? search.room.charAt(0).toUpperCase() + search.room.slice(1)
+    : null;
+  const roomEmojis: Record<string, string> = {
+    music: "🎵",
+    chill: "😌",
+    gaming: "🎮",
+    rants: "💬",
+  };
+  const roomEmoji = search.room ? (roomEmojis[search.room] ?? "🎙️") : null;
   const { identity, clear } = useInternetIdentity();
   const { localSession, logoutLocal, isLocalLoggedIn, sessionValidated } =
     useLocalAuth();
@@ -245,7 +256,7 @@ export default function LobbyPage() {
             <span className="font-display font-bold text-lg">WaveChat</span>
             <span className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground ml-4">
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              Global Lobby
+              {roomName ? `${roomEmoji} ${roomName} Room` : "Global Lobby"}
             </span>
             {currentDisplayName && (
               <span className="hidden md:inline text-sm font-medium text-foreground ml-2">
@@ -567,7 +578,11 @@ export default function LobbyPage() {
                 <Input
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  placeholder="Say something to the lobby..."
+                  placeholder={
+                    roomName
+                      ? `Say something in ${roomName}...`
+                      : "Say something to the lobby..."
+                  }
                   className="flex-1 rounded-full h-11 px-5"
                   data-ocid="lobby.input"
                 />

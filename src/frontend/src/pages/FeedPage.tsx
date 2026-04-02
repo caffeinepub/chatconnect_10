@@ -494,7 +494,12 @@ export default function FeedPage() {
                 <button
                   key={room.name}
                   type="button"
-                  onClick={() => navigate({ to: "/lobby" })}
+                  onClick={() =>
+                    navigate({
+                      to: "/lobby",
+                      search: { room: room.name.toLowerCase() },
+                    })
+                  }
                   className={`flex-shrink-0 w-32 rounded-2xl p-3 bg-gradient-to-br ${room.gradient} text-white text-left transition-transform active:scale-95 hover:scale-[1.03]`}
                   data-ocid="feed.primary_button"
                 >

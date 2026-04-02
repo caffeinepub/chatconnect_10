@@ -47,6 +47,9 @@ const lobbyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/lobby",
   component: LobbyPage,
+  validateSearch: (search: Record<string, unknown>): { room?: string } => ({
+    room: typeof search.room === "string" ? search.room : undefined,
+  }),
 });
 
 const cardsRoute = createRoute({
