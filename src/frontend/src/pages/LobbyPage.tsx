@@ -59,7 +59,8 @@ function getGradient(str: string) {
 export default function LobbyPage() {
   const navigate = useNavigate();
   const { identity, clear } = useInternetIdentity();
-  const { localSession, logoutLocal, isLocalLoggedIn } = useLocalAuth();
+  const { localSession, logoutLocal, isLocalLoggedIn, sessionValidated } =
+    useLocalAuth();
   const { actor } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
   const queryClient = useQueryClient();
@@ -114,10 +115,10 @@ export default function LobbyPage() {
 
   // Auth guard
   useEffect(() => {
-    if (!identity && !isLocalLoggedIn && !profileLoading) {
+    if (sessionValidated && !identity && !isLocalLoggedIn && !profileLoading) {
       navigate({ to: "/login" });
     }
-  }, [identity, isLocalLoggedIn, profileLoading, navigate]);
+  }, [sessionValidated, identity, isLocalLoggedIn, profileLoading, navigate]);
 
   useEffect(() => {
     if (identity && !profileLoading && myProfile === null)
@@ -235,7 +236,7 @@ export default function LobbyPage() {
   return (
     <TooltipProvider>
       <GlobalCallWatcher />
-      <div className="h-screen bg-background flex flex-col">
+      <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
         <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
@@ -317,33 +318,65 @@ export default function LobbyPage() {
               )}
             </button>
           </div>
-          {/* Pill list */}
+          {/* On Air round avatars */}
           <div
-            className="flex items-center gap-2 px-4 py-2 overflow-x-auto"
+            className="flex items-center gap-3 px-4 py-2 overflow-x-auto"
             style={{ scrollbarWidth: "none" }}
           >
-            {tabUsers.length === 0 ? (
+            {tabUsers.map((p) => (
+              <div
+                key={p.username}
+                className="flex flex-col items-center gap-1 flex-shrink-0"
+              >
+                <div className="relative">
+                  <div
+                    className={`w-12 h-12 rounded-full bg-gradient-to-br ${getGradient(p.username)} flex items-center justify-center text-white text-sm font-bold`}
+                    style={
+                      voiceTab === "mic"
+                        ? { boxShadow: "0 0 0 2px #22c55e" }
+                        : {}
+                    }
+                  >
+                    {p.displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                  {voiceTab === "mic" && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-background flex items-center justify-center">
+                      <Mic className="h-2.5 w-2.5 text-white" />
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground max-w-[48px] truncate text-center">
+                  {p.displayName}
+                </span>
+              </div>
+            ))}
+            {/* Plus button to go On Air */}
+            {!isInChannel && (
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleJoinVoice}
+                  className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-teal-400 flex items-center justify-center text-white text-2xl font-bold hover:scale-105 transition-transform"
+                  title="Go On Air"
+                >
+                  +
+                </button>
+                <span className="text-[10px] text-muted-foreground">
+                  On Air
+                </span>
+              </div>
+            )}
+            {tabUsers.length === 0 && isInChannel && (
               <span className="text-xs text-muted-foreground">
                 {voiceTab === "mic"
                   ? "No one on air right now"
                   : "No listeners yet"}
               </span>
-            ) : (
-              tabUsers.map((p) => (
-                <span
-                  key={p.username}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
-                    voiceTab === "mic"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-violet-100 text-violet-700"
-                  }`}
-                >
-                  {voiceTab === "mic" && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  )}
-                  {p.displayName}
-                </span>
-              ))
+            )}
+            {tabUsers.length === 0 && !isInChannel && (
+              <span className="text-xs text-muted-foreground ml-2">
+                Tap + to go on air
+              </span>
             )}
           </div>
         </div>

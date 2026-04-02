@@ -118,7 +118,8 @@ function defaultPostState(): PostState {
 export default function FeedPage() {
   const navigate = useNavigate();
   const { identity, clear } = useInternetIdentity();
-  const { localSession, logoutLocal, isLocalLoggedIn } = useLocalAuth();
+  const { localSession, logoutLocal, isLocalLoggedIn, sessionValidated } =
+    useLocalAuth();
   const { actor } = useActor();
   const queryClient = useQueryClient();
   const [postText, setPostText] = useState("");
@@ -136,10 +137,10 @@ export default function FeedPage() {
 
   // Auth guard
   useEffect(() => {
-    if (!identity && !isLocalLoggedIn) {
+    if (sessionValidated && !identity && !isLocalLoggedIn) {
       navigate({ to: "/login" });
     }
-  }, [identity, isLocalLoggedIn, navigate]);
+  }, [sessionValidated, identity, isLocalLoggedIn, navigate]);
 
   // Fetch local posts via polling
   useEffect(() => {
@@ -154,7 +155,7 @@ export default function FeedPage() {
       }
     };
     fetchPosts();
-    const interval = setInterval(fetchPosts, 3000);
+    const interval = setInterval(fetchPosts, 2000);
     return () => clearInterval(interval);
   }, [isLocalLoggedIn, actor, localSession]);
 
@@ -447,6 +448,67 @@ export default function FeedPage() {
         </header>
 
         <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 pb-24">
+          {/* Voice Rooms */}
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-4"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-semibold text-foreground">
+                🎙️ Voice Rooms
+              </span>
+              <span className="text-xs text-muted-foreground">Tap to join</span>
+            </div>
+            <div
+              className="flex gap-3 overflow-x-auto pb-2"
+              style={{ scrollbarWidth: "none" }}
+            >
+              {[
+                {
+                  name: "Music",
+                  emoji: "🎵",
+                  gradient: "from-pink-500 to-rose-600",
+                  desc: "Share tunes",
+                },
+                {
+                  name: "Chill",
+                  emoji: "😌",
+                  gradient: "from-teal-400 to-cyan-500",
+                  desc: "Relax & talk",
+                },
+                {
+                  name: "Gaming",
+                  emoji: "🎮",
+                  gradient: "from-violet-500 to-indigo-600",
+                  desc: "Gaming chat",
+                },
+                {
+                  name: "Rants",
+                  emoji: "💬",
+                  gradient: "from-orange-400 to-amber-500",
+                  desc: "Vent & share",
+                },
+              ].map((room) => (
+                <button
+                  key={room.name}
+                  type="button"
+                  onClick={() => navigate({ to: "/lobby" })}
+                  className={`flex-shrink-0 w-32 rounded-2xl p-3 bg-gradient-to-br ${room.gradient} text-white text-left transition-transform active:scale-95 hover:scale-[1.03]`}
+                  data-ocid="feed.primary_button"
+                >
+                  <div className="text-xl mb-1">{room.emoji}</div>
+                  <div className="font-semibold text-sm">{room.name}</div>
+                  <div className="text-[10px] opacity-80">{room.desc}</div>
+                  <div className="mt-1.5 text-[10px] bg-black/20 rounded-full px-2 py-0.5 inline-block">
+                    Join →
+                  </div>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
           {/* Composer */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}

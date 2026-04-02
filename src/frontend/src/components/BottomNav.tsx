@@ -83,6 +83,30 @@ export function BottomNav() {
     return () => clearInterval(interval);
   }, [isLocalLoggedIn, localSession, extActor]);
 
+  // Detect incoming calls for pulsing ring on Calls button
+  const [hasIncomingCall, setHasIncomingCall] = useState(false);
+  useEffect(() => {
+    if (!isLocalLoggedIn || !localSession || !extActor) return;
+    const checkIncoming = async () => {
+      try {
+        const reqs = await (extActor as any).getCallRequestsAsLocal(
+          localSession.token,
+        );
+        const pending = reqs.some(
+          (r: any) =>
+            r.calleeUsername === localSession.username &&
+            r.status === "pending",
+        );
+        setHasIncomingCall(pending);
+      } catch {
+        // ignore
+      }
+    };
+    checkIncoming();
+    const interval = setInterval(checkIncoming, 2000);
+    return () => clearInterval(interval);
+  }, [isLocalLoggedIn, localSession, extActor]);
+
   const isActive = (path: string) => location.pathname === path;
 
   const btnClass = (path: string) =>
@@ -141,8 +165,24 @@ export function BottomNav() {
         onClick={() => navigate({ to: "/cards" })}
         data-ocid="nav.cards_link"
       >
-        <Phone className="h-[20px] w-[20px]" />
-        <span className={labelClass}>Calls</span>
+        <div className="relative">
+          <Phone
+            className="h-[20px] w-[20px]"
+            style={hasIncomingCall ? { color: "#ef4444" } : {}}
+          />
+          {hasIncomingCall && (
+            <span className="absolute inset-0 rounded-full border-2 border-red-500 animate-ping" />
+          )}
+          {hasIncomingCall && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-background animate-pulse" />
+          )}
+        </div>
+        <span
+          className={labelClass}
+          style={hasIncomingCall ? { color: "#ef4444" } : {}}
+        >
+          Calls
+        </span>
       </button>
 
       {/* Lobby */}

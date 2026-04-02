@@ -1,32 +1,30 @@
-# Wave Chat
+# Wave Chat – Part 1: Backend Stability & Data Persistence
 
 ## Current State
-Wave Chat is a mobile-first social/chat app with username/password auth, lobby chatroom, calling cards, news feed, private messaging (inbox), notifications, profiles, voice/video calls, and admin panel for WILDFIRE.
+- All backend state uses in-memory `Map.empty<K,V>()` with no stable memory hooks
+- Every redeployment wipes all user accounts, messages, sessions, and social data
+- Session token stored in localStorage becomes invalid after redeploy (frontend doesn't validate on startup)
+- Messaging has intermittent failures; inbox sometimes appears empty
+- Login function has a structural issue where ban check is misplaced relative to the password check block
 
 ## Requested Changes (Diff)
 
 ### Add
-- Viewport meta tag: `user-scalable=no, maximum-scale=1` to disable manual page zoom
-- Admin Panel button under Settings gear icon on profile page (in addition to existing profile page access)
+- `stable var` arrays for every persistent data collection in main.mo
+- `system func preupgrade()` – dumps all Maps/Sets to stable arrays before upgrade
+- `system func postupgrade()` – rebuilds Maps/Sets from stable arrays after upgrade
+- `validateSessionToken` check on app startup in frontend; if token is stale (backend was redeployed), clear localStorage and redirect to login with a friendly message instead of silent errors
 
 ### Modify
-- **GlobalCallWatcher**: Remove video call toast popup entirely. Remove the regular incoming call toast popup too. Only keep the floating Accept/Deny banner for voice calls (the existing IncomingCallBanner component). Video call requests should show only via banner, not toast.
-- **Dark mode**: Ensure ALL pages have full dark mode coverage — Lobby page white portions, app name/header bars, all sub-menus and settings overlays.
-- **Messages/DM**: Fix sendDirectMessage so messages actually get stored and displayed. Fix inbox conversations list to populate.
-- **Lobby Voice**: Fix On Air (mic on + speaker on) vs Listeners (speaker only, mic off) distinction. Before joining On Air, explicitly request mic permission. User lands in Listeners on join, moves to On Air only when mic is enabled.
-- **Video call**: Fix video stream so both parties can see each other. Ensure remote video track is properly rendered.
-- **Profile tap**: Tapping any username or profile picture anywhere (Feed posts, Lobby chat, Inbox, Calling cards) navigates to that user's full profile page — not a calling card popup.
+- Fix the misplaced ban check in `loginLocalAccount` (currently inside the wrong if block)
+- MessagesPage: on load, validate session before fetching; show proper error if session expired
+- useLocalAuth: add a `validateOnMount` effect that pings `validateSessionToken` and auto-clears if invalid
 
 ### Remove
-- Toast popup for incoming voice calls (keep only floating banner)
-- Toast popup for video call requests (keep only floating banner if any)
+- Nothing removed
 
 ## Implementation Plan
-1. Update `src/frontend/index.html` viewport meta to disable user zoom
-2. In `GlobalCallWatcher.tsx`: remove both toast() calls for incoming calls and video call signals — let the existing floating banner handle incoming voice calls
-3. Fix dark mode in `LobbyPage.tsx`, `BottomNav.tsx`, and any page with white background sections — ensure `dark:bg-*` classes cover all containers
-4. Fix `MessagesPage.tsx`: ensure sendDirectMessage is called with correct params and conversations are fetched properly
-5. Fix `LobbyPage.tsx` voice: add mic permission request before On Air, track On Air vs Listeners state correctly
-6. Fix `VideoCallScreen.tsx`: ensure video tracks are added to peer connection and remote video renders
-7. Add clickable username/avatar navigation to profile in Feed, Lobby chat messages, Inbox, CallingCards
-8. Add Admin Panel trigger button inside the Settings sheet on MyProfilePage
+1. Rewrite main.mo: add stable arrays for all 20+ collections, implement preupgrade/postupgrade
+2. Fix loginLocalAccount ban check placement bug
+3. Update useLocalAuth.ts: on mount, call validateSessionToken; if null, clear session + show "Session expired, please log in again" toast
+4. Ensure MessagesPage, FeedPage, etc. don't crash on invalid sessions (they already catch errors, but user should see a clear message)

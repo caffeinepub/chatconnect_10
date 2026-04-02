@@ -97,7 +97,7 @@ export default function SignupPage() {
           displayName,
         }),
       );
-      toast.success("Account created! Welcome to ChatConnect 🎉");
+      toast.success("Account created! Welcome to Wave Chat 🎉");
       navigate({ to: "/lobby" });
     } catch (err: any) {
       const msg = (err?.message || "").toLowerCase();
@@ -132,7 +132,7 @@ export default function SignupPage() {
                 <MessageCircle className="h-5 w-5 text-white" />
               </div>
               <span className="font-display font-bold text-2xl text-foreground">
-                ChatConnect
+                Wave Chat
               </span>
             </div>
           </Link>
@@ -144,7 +144,7 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-4xl p-8 shadow-card border border-border">
+        <div className="bg-card rounded-4xl p-8 shadow-card border border-border">
           {isConnecting && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 p-3 bg-muted/50 rounded-xl">
               <Loader2 className="h-4 w-4 animate-spin" />

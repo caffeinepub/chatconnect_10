@@ -46,10 +46,37 @@ export function useLocalAuth() {
   const [localSession, setLocalSession] = useState<LocalSession | null>(
     readSession,
   );
+  const [sessionValidated, setSessionValidated] = useState(false);
 
+  // Validate stored session against the backend on startup.
+  // If the backend was redeployed the token no longer exists, so clear it.
   useEffect(() => {
-    setLocalSession(readSession());
-  }, []);
+    if (!extActor) return;
+    const stored = readSession();
+    if (!stored) {
+      setSessionValidated(true);
+      return;
+    }
+    extActor
+      .validateSessionToken(stored.token)
+      .then((result) => {
+        if (
+          result === null ||
+          result === undefined ||
+          (Array.isArray(result) && result.length === 0)
+        ) {
+          // Token is no longer valid (backend was redeployed or session expired)
+          clearSession();
+          setLocalSession(null);
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — keep session, let server banner handle it
+      })
+      .finally(() => {
+        setSessionValidated(true);
+      });
+  }, [extActor]);
 
   const loginLocal = useCallback(
     async (username: string, passwordHash: string) => {
@@ -81,5 +108,6 @@ export function useLocalAuth() {
     loginLocal,
     logoutLocal,
     isLocalLoggedIn: localSession !== null,
+    sessionValidated,
   };
 }

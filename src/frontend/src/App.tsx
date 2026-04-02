@@ -1,9 +1,9 @@
 import { Toaster } from "@/components/ui/sonner";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { createRootRoute, createRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { GlobalEffects } from "./components/GlobalEffects";
 import { ServerStatusBanner } from "./components/ServerStatusBanner";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import CallScreen from "./pages/CallScreen";
 import CallingCardsPage from "./pages/CallingCardsPage";
 import FeedPage from "./pages/FeedPage";
@@ -16,12 +16,6 @@ import NotificationsPage from "./pages/NotificationsPage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 import SignupPage from "./pages/SignupPage";
 import VideoCallScreen from "./pages/VideoCallScreen";
-
-// Init dark mode from localStorage before first render
-const savedDarkMode = localStorage.getItem("wavechat_darkmode");
-if (savedDarkMode === "true") {
-  document.documentElement.classList.add("dark");
-}
 
 const rootRoute = createRootRoute();
 
@@ -121,26 +115,12 @@ declare module "@tanstack/react-router" {
 }
 
 export default function App() {
-  useEffect(() => {
-    const applyDark = () => {
-      const saved = localStorage.getItem("wavechat_darkmode");
-      if (saved === "true") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    };
-    applyDark();
-    window.addEventListener("storage", applyDark);
-    return () => window.removeEventListener("storage", applyDark);
-  }, []);
-
   return (
-    <>
+    <ThemeProvider>
       <ServerStatusBanner />
       <RouterProvider router={router} />
       <GlobalEffects />
       <Toaster richColors position="top-right" />
-    </>
+    </ThemeProvider>
   );
 }

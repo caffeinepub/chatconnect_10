@@ -44,6 +44,7 @@ import type {
 import { AdminPanel } from "../components/AdminPanel";
 import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
+import { type AppTheme, useTheme } from "../contexts/ThemeContext";
 import { useActor } from "../hooks/useActor";
 import { useLocalAuth } from "../hooks/useLocalAuth";
 
@@ -66,7 +67,8 @@ function statusColor(status: string): string {
 
 export default function MyProfilePage() {
   const { actor } = useActor();
-  const { localSession, logoutLocal, isLocalLoggedIn } = useLocalAuth();
+  const { localSession, logoutLocal, isLocalLoggedIn, sessionValidated } =
+    useLocalAuth();
   const navigate = useNavigate();
   const extActor = actor as unknown as ExtendedBackend | null;
 
@@ -99,7 +101,7 @@ export default function MyProfilePage() {
 
   // Admin panel
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
-  const isAdmin = localSession?.username === "WILDFIRE";
+  const isAdmin = localSession?.username?.toUpperCase() === "WILDFIRE";
 
   // Settings dialog
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -107,10 +109,8 @@ export default function MyProfilePage() {
   const [hideFollowing, setHideFollowing] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Dark mode
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem("wavechat_darkmode") === "true";
-  });
+  // Dark mode / theme
+  const { theme: currentTheme, setTheme } = useTheme();
 
   // Profile visitors
   const [visitorCount, setVisitorCount] = useState<number>(0);
@@ -154,10 +154,10 @@ export default function MyProfilePage() {
   }, [viewingUser, extActor]);
 
   useEffect(() => {
-    if (!isLocalLoggedIn) {
+    if (sessionValidated && !isLocalLoggedIn) {
       navigate({ to: "/login" });
     }
-  }, [isLocalLoggedIn, navigate]);
+  }, [sessionValidated, isLocalLoggedIn, navigate]);
 
   useEffect(() => {
     if (!isLocalLoggedIn || !actor || !localSession) return;
@@ -218,17 +218,6 @@ export default function MyProfilePage() {
       await extActor.setUserStatus(localSession.token, statusToSave);
     } catch {
       // ignore
-    }
-  };
-
-  const handleDarkModeToggle = (enabled: boolean) => {
-    setDarkMode(enabled);
-    if (enabled) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("wavechat_darkmode", "true");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("wavechat_darkmode", "false");
     }
   };
 
@@ -367,9 +356,9 @@ export default function MyProfilePage() {
       vp.username.slice(0, 2).toUpperCase();
     const vpGradient = "from-purple-500 to-teal-400";
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 flex flex-col">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-background dark:via-background dark:to-background flex flex-col">
         <GlobalCallWatcher />
-        <header className="bg-white dark:bg-gray-900 border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
+        <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -383,7 +372,7 @@ export default function MyProfilePage() {
         </header>
         <main className="flex-1 flex items-start justify-center px-4 py-10 pb-28">
           <div className="w-full max-w-md">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+            <div className="bg-card rounded-2xl shadow-lg overflow-hidden">
               <div className="h-24 bg-gradient-to-r from-purple-500 via-indigo-500 to-teal-400" />
               <div className="px-6 pb-6">
                 <div className="flex items-end justify-between -mt-12 mb-4">
@@ -463,7 +452,7 @@ export default function MyProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50 dark:from-background dark:via-background dark:to-background flex flex-col">
       <GlobalCallWatcher />
 
       {/* Hidden file input */}
@@ -476,7 +465,7 @@ export default function MyProfilePage() {
       />
 
       {/* Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
+      <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
             W
@@ -499,7 +488,7 @@ export default function MyProfilePage() {
       <main className="flex-1 flex items-start justify-center px-4 py-10 pb-28">
         <div className="w-full max-w-md">
           {/* Profile Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-lg overflow-hidden">
             {/* Banner */}
             <div className="h-24 bg-gradient-to-r from-purple-500 via-indigo-500 to-teal-400" />
 
@@ -772,7 +761,7 @@ export default function MyProfilePage() {
           {/* Contact Developer */}
           <a
             href="mailto:srklimon3@gmail.com"
-            className="mt-4 flex items-center gap-3 w-full bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-border px-5 py-4 hover:shadow-md transition-shadow group"
+            className="mt-4 flex items-center gap-3 w-full bg-card rounded-2xl shadow-sm border border-border px-5 py-4 hover:shadow-md transition-shadow group"
             data-ocid="profile.link"
           >
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
@@ -868,21 +857,33 @@ export default function MyProfilePage() {
                 data-ocid="profile.switch"
               />
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Moon className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Dark mode</p>
-                  <p className="text-xs text-muted-foreground">
-                    Switch to dark theme
-                  </p>
-                </div>
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-foreground">Theme</h4>
+              <div className="grid grid-cols-4 gap-2">
+                {(
+                  [
+                    { id: "light", label: "Light", emoji: "☀️" },
+                    { id: "dark", label: "Dark", emoji: "🌙" },
+                    { id: "raining", label: "Rain", emoji: "🌧️" },
+                    { id: "cloudy", label: "Cloudy", emoji: "⛅" },
+                    { id: "mountain", label: "Mountain", emoji: "🏔️" },
+                    { id: "seawave", label: "Seawave", emoji: "🌊" },
+                    { id: "waterfalls", label: "Waterfall", emoji: "💧" },
+                    { id: "sunny", label: "Sunny", emoji: "🌤️" },
+                  ] as { id: AppTheme; label: string; emoji: string }[]
+                ).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTheme(t.id)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-xs font-medium transition-all ${currentTheme === t.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/50"}`}
+                    data-ocid="profile.toggle"
+                  >
+                    <span className="text-base">{t.emoji}</span>
+                    <span>{t.label}</span>
+                  </button>
+                ))}
               </div>
-              <Switch
-                checked={darkMode}
-                onCheckedChange={handleDarkModeToggle}
-                data-ocid="profile.switch"
-              />
             </div>
           </div>
           {isAdmin && (

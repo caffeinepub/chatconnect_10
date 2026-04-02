@@ -29,11 +29,11 @@ actor {
   let verifiedUsers = Set.empty<Text>();
   let bannedUsers = Set.empty<Text>();
   let banExpiry = Map.empty<Text, Time.Time>();
-  var nextId = 0;
-  var nextTokenId : Nat = 1;
-  var nextSignalId : Nat = 0;
-  var nextNotificationId : Nat = 0;
-  var nextDmId : Nat = 0;
+  stable var nextId = 0;
+  stable var nextTokenId : Nat = 1;
+  stable var nextSignalId : Nat = 0;
+  stable var nextNotificationId : Nat = 0;
+  stable var nextDmId : Nat = 0;
   let typingStatus = Map.empty<Text, Time.Time>(); // key: "sender_recipient"
 
   type Message = {
@@ -1506,6 +1506,7 @@ actor {
     };
     if (localUser.passwordHash != passwordHash) {
       Runtime.trap("Invalid username or password");
+    };
     if (bannedUsers.contains(username)) {
       // Check if ban has expired
       let stillBanned = switch (banExpiry.get(username)) {
@@ -1518,7 +1519,6 @@ actor {
         bannedUsers.remove(username);
         banExpiry.remove(username);
       };
-    };
     };
     let token = nextTokenId;
     nextTokenId += 1;
@@ -1929,5 +1929,152 @@ actor {
   public query func getUserStatus(username : Text) : async ?Text {
     userStatuses.get(username);
   };
+
+  // ===== STABLE MEMORY (persists across upgrades) =====
+
+  stable var stableLocalUsers : [(Text, LocalUser)] = [];
+  stable var stableSessions : [(Nat, Text)] = [];
+  stable var stableMessages : [(Nat, Message)] = [];
+  stable var stablePosts : [(Nat, Post)] = [];
+  stable var stableDirectMessages : [(Nat, DirectMessage)] = [];
+  stable var stableComments : [(Nat, Comment)] = [];
+  stable var stableNotifications : [(Nat, Notification)] = [];
+  stable var stableLocalCallRequests : [(Nat, LocalCallRequest)] = [];
+  stable var stableVerifiedUsers : [Text] = [];
+  stable var stableBannedUsers : [Text] = [];
+  stable var stableBanExpiry : [(Text, Time.Time)] = [];
+  stable var stableFollowers : [(Text, [Text])] = [];
+  stable var stableFollowing : [(Text, [Text])] = [];
+  stable var stableBlockList : [(Text, [Text])] = [];
+  stable var stableProfileSettings : [(Text, ProfileSettings)] = [];
+  stable var stableCallTopics : [(Text, Text)] = [];
+  stable var stableUserBios : [(Text, Text)] = [];
+  stable var stableUserStatuses : [(Text, Text)] = [];
+  stable var stableProfileVisitors : [(Text, [Text])] = [];
+  stable var stableLastSeen : [(Text, Time.Time)] = [];
+  stable var stableLikesFlat : [(Nat, Text, Text)] = [];
+
+  system func preupgrade() {
+    stableLocalUsers := localUsers.entries().toArray();
+    stableSessions := sessions.entries().toArray();
+    stableMessages := messages.entries().toArray();
+    stablePosts := posts.entries().toArray();
+    stableDirectMessages := directMessages.entries().toArray();
+    stableComments := comments.entries().toArray();
+    stableNotifications := notifications.entries().toArray();
+    stableLocalCallRequests := localCallRequests.entries().toArray();
+    stableVerifiedUsers := verifiedUsers.toArray();
+    stableBannedUsers := bannedUsers.toArray();
+    stableBanExpiry := banExpiry.entries().toArray();
+    // Convert Map<Text, Set<Text>> to [(Text, [Text])] using explicit loops
+    var tmpFollowers : [(Text, [Text])] = [];
+    for ((k, v) in followers.entries()) {
+      tmpFollowers := tmpFollowers.concat([(k, v.toArray())]);
+    };
+    stableFollowers := tmpFollowers;
+    var tmpFollowing : [(Text, [Text])] = [];
+    for ((k, v) in following.entries()) {
+      tmpFollowing := tmpFollowing.concat([(k, v.toArray())]);
+    };
+    stableFollowing := tmpFollowing;
+    var tmpBlockList : [(Text, [Text])] = [];
+    for ((k, v) in blockList.entries()) {
+      tmpBlockList := tmpBlockList.concat([(k, v.toArray())]);
+    };
+    stableBlockList := tmpBlockList;
+    stableProfileSettings := profileSettings.entries().toArray();
+    stableCallTopics := callTopics.entries().toArray();
+    stableUserBios := userBios.entries().toArray();
+    stableUserStatuses := userStatuses.entries().toArray();
+    var tmpProfileVisitors : [(Text, [Text])] = [];
+    for ((k, v) in profileVisitors.entries()) {
+      tmpProfileVisitors := tmpProfileVisitors.concat([(k, v.toArray())]);
+    };
+    stableProfileVisitors := tmpProfileVisitors;
+    stableLastSeen := lastSeen.entries().toArray();
+    // Flatten likes: (postId, principal.toText(), displayName)
+    var flatLikes : [(Nat, Text, Text)] = [];
+    for ((postId, likeMap) in likes.entries()) {
+      for ((principal, name) in likeMap.entries()) {
+        flatLikes := flatLikes.concat([(postId, principal.toText(), name)]);
+      };
+    };
+    stableLikesFlat := flatLikes;
+  };
+
+  system func postupgrade() {
+    for ((k, v) in stableLocalUsers.values()) { localUsers.add(k, v) };
+    for ((k, v) in stableSessions.values()) { sessions.add(k, v) };
+    for ((k, v) in stableMessages.values()) { messages.add(k, v) };
+    for ((k, v) in stablePosts.values()) { posts.add(k, v) };
+    for ((k, v) in stableDirectMessages.values()) { directMessages.add(k, v) };
+    for ((k, v) in stableComments.values()) { comments.add(k, v) };
+    for ((k, v) in stableNotifications.values()) { notifications.add(k, v) };
+    for ((k, v) in stableLocalCallRequests.values()) { localCallRequests.add(k, v) };
+    for (u in stableVerifiedUsers.values()) { verifiedUsers.add(u) };
+    for (u in stableBannedUsers.values()) { bannedUsers.add(u) };
+    for ((k, v) in stableBanExpiry.values()) { banExpiry.add(k, v) };
+    for ((k, arr) in stableFollowers.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      followers.add(k, s);
+    };
+    for ((k, arr) in stableFollowing.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      following.add(k, s);
+    };
+    for ((k, arr) in stableBlockList.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      blockList.add(k, s);
+    };
+    for ((k, v) in stableProfileSettings.values()) { profileSettings.add(k, v) };
+    for ((k, v) in stableCallTopics.values()) { callTopics.add(k, v) };
+    for ((k, v) in stableUserBios.values()) { userBios.add(k, v) };
+    for ((k, v) in stableUserStatuses.values()) { userStatuses.add(k, v) };
+    for ((k, arr) in stableProfileVisitors.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      profileVisitors.add(k, s);
+    };
+    for ((k, v) in stableLastSeen.values()) { lastSeen.add(k, v) };
+    // Restore likes
+    for ((postId, principalText, name) in stableLikesFlat.values()) {
+      let p = Principal.fromText(principalText);
+      let postLikes = switch (likes.get(postId)) {
+        case (?pl) { pl };
+        case (null) {
+          let newMap = Map.empty<Principal, Text>();
+          likes.add(postId, newMap);
+          newMap;
+        };
+      };
+      postLikes.add(p, name);
+    };
+    // Clear stable arrays after restore to free memory
+    stableLocalUsers := [];
+    stableSessions := [];
+    stableMessages := [];
+    stablePosts := [];
+    stableDirectMessages := [];
+    stableComments := [];
+    stableNotifications := [];
+    stableLocalCallRequests := [];
+    stableVerifiedUsers := [];
+    stableBannedUsers := [];
+    stableBanExpiry := [];
+    stableFollowers := [];
+    stableFollowing := [];
+    stableBlockList := [];
+    stableProfileSettings := [];
+    stableCallTopics := [];
+    stableUserBios := [];
+    stableUserStatuses := [];
+    stableProfileVisitors := [];
+    stableLastSeen := [];
+    stableLikesFlat := [];
+  };
+
 
 };

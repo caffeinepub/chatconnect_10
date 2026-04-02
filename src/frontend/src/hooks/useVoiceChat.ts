@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { VoiceParticipant, backendInterface } from "../backend.d";
 import { useActor } from "./useActor";
 
+// Multiple STUN servers for fastest candidate gathering + free TURN relays for NAT traversal
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -10,11 +11,16 @@ const ICE_SERVERS = [
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:stun.services.mozilla.com" },
-  { urls: "stun:stun.stunprotocol.org:3478" },
   { urls: "stun:stun.relay.metered.ca:80" },
+  { urls: "stun:stun.nextcloud.com:443" },
+  // OpenRelayProject free TURN – multiple geo endpoints
   {
     urls: "turn:a.relay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:80?transport=tcp",
     username: "openrelayproject",
     credential: "openrelayproject",
   },
@@ -27,6 +33,23 @@ const ICE_SERVERS = [
     urls: "turns:a.relay.metered.ca:443?transport=tcp",
     username: "openrelayproject",
     credential: "openrelayproject",
+  },
+  // Numb TURN (free)
+  {
+    urls: "turn:numb.viagenie.ca",
+    username: "webrtc@live.com",
+    credential: "muazkh",
+  },
+  // FreeTurn
+  {
+    urls: "turn:freeturn.net:3478",
+    username: "free",
+    credential: "free",
+  },
+  {
+    urls: "turns:freeturn.net:5349",
+    username: "free",
+    credential: "free",
   },
 ];
 
@@ -178,22 +201,34 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       };
 
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "failed") {
-          pc.restartIce();
-        }
         if (
-          pc.iceConnectionState === "connected" ||
-          pc.iceConnectionState === "completed"
+          pc.iceConnectionState === "failed" ||
+          (pc.iceConnectionState === "disconnected" && isInChannelRef.current)
         ) {
-          toast.success(`Voice connected to ${username}!`);
-        }
-        if (pc.iceConnectionState === "disconnected") {
-          // Attempt auto-recovery after 2s
-          setTimeout(() => {
-            if (pc.iceConnectionState === "disconnected") {
-              pc.restartIce();
+          setTimeout(async () => {
+            if (!isInChannelRef.current) return;
+            const stillBad =
+              pc.iceConnectionState === "failed" ||
+              pc.iceConnectionState === "disconnected";
+            if (stillBad && voiceActor && token) {
+              try {
+                pc.close();
+                peerConnections.current.delete(username);
+                const newPc = createPeerConnection(username);
+                addLocalTracks(newPc);
+                const offer = await newPc.createOffer();
+                await newPc.setLocalDescription(offer);
+                await voiceActor.sendSignal(
+                  token,
+                  username,
+                  "offer",
+                  JSON.stringify(offer),
+                );
+              } catch {
+                // ignore
+              }
             }
-          }, 2000);
+          }, 3000);
         }
       };
 
@@ -235,7 +270,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         if (from === myUsername) continue;
 
         // Build a unique key for this signal to avoid reprocessing
-        const sigKey = `${from}:${signal.signalType}:${signal.data.slice(0, 32)}`;
+        const sigKey = `${from}:${signal.signalType}:${signal.data.slice(0, 100)}`;
 
         if (signal.signalType === "offer") {
           const pc = peerConnections.current.get(from);
@@ -284,11 +319,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           }
         } else if (signal.signalType === "answer") {
           const pc = peerConnections.current.get(from);
-          if (
-            pc &&
-            pc.signalingState === "have-local-offer" &&
-            !pc.remoteDescription
-          ) {
+          if (pc && pc.signalingState === "have-local-offer") {
             try {
               const answer = JSON.parse(signal.data);
               await pc.setRemoteDescription(new RTCSessionDescription(answer));

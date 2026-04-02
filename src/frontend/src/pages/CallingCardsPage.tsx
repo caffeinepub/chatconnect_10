@@ -216,18 +216,23 @@ function LocalCallingCard({
 
   // Load bio + verified status + custom status
   useEffect(() => {
-    if (!extActor) return;
+    if (!extActor || !user.username) return;
+    let cancelled = false;
     Promise.all([
-      extActor.getUserBio(user.username).catch(() => ""),
+      extActor.getUserBio(user.username).catch(() => null),
       extActor.isUserVerified(user.username).catch(() => false),
-      extActor.getUserStatus(user.username).catch(() => ""),
+      extActor.getUserStatus(user.username).catch(() => null),
       extActor.getCallTopic(user.username).catch(() => null),
-    ]).then(([b, v, s, t]) => {
-      setUserBio(b ?? "");
-      setIsVerified(v);
-      setUserStatus(s ?? "");
-      setCallTopic(t ?? "");
+    ]).then(([bio, verified, status, topic]) => {
+      if (cancelled) return;
+      setUserBio(bio ? String(bio) : "");
+      setIsVerified(Boolean(verified));
+      setUserStatus(status ? String(status) : "");
+      setCallTopic(topic ? String(topic) : "");
     });
+    return () => {
+      cancelled = true;
+    };
   }, [extActor, user.username]);
 
   // Record profile visit (fire-and-forget)
@@ -596,7 +601,8 @@ function LocalCallingCard({
 export default function CallingCardsPage() {
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
-  const { isLocalLoggedIn, localSession, logoutLocal } = useLocalAuth();
+  const { isLocalLoggedIn, localSession, logoutLocal, sessionValidated } =
+    useLocalAuth();
   const { actor, isFetching: actorFetching } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -653,10 +659,10 @@ export default function CallingCardsPage() {
   }, [callRequests, localSession, navigate]);
 
   useEffect(() => {
-    if (!identity && !isLocalLoggedIn && !profileLoading) {
+    if (sessionValidated && !identity && !isLocalLoggedIn && !profileLoading) {
       navigate({ to: "/login" });
     }
-  }, [identity, isLocalLoggedIn, profileLoading, navigate]);
+  }, [sessionValidated, identity, isLocalLoggedIn, profileLoading, navigate]);
 
   useEffect(() => {
     if (identity && !profileLoading && myProfile === null)
@@ -710,7 +716,7 @@ export default function CallingCardsPage() {
   return (
     <div className="min-h-screen bg-background">
       <GlobalCallWatcher />
-      <header className="bg-white border-b border-border px-6 py-3 flex items-center justify-between">
+      <header className="bg-background border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center text-white font-bold text-sm">
             W
@@ -866,38 +872,6 @@ export default function CallingCardsPage() {
                 );
               })}
             </div>
-            {/* Left arrow */}
-            <button
-              type="button"
-              onClick={() => {
-                if (carouselRef.current) {
-                  carouselRef.current.scrollBy({
-                    left: -300,
-                    behavior: "smooth",
-                  });
-                }
-              }}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-foreground hover:bg-muted transition-colors z-10 text-xl font-bold"
-              aria-label="Previous"
-            >
-              &#8249;
-            </button>
-            {/* Right arrow */}
-            <button
-              type="button"
-              onClick={() => {
-                if (carouselRef.current) {
-                  carouselRef.current.scrollBy({
-                    left: 300,
-                    behavior: "smooth",
-                  });
-                }
-              }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-foreground hover:bg-muted transition-colors z-10 text-xl font-bold"
-              aria-label="Next"
-            >
-              &#8250;
-            </button>
           </div>
         )}
       </main>

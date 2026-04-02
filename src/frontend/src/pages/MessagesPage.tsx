@@ -76,7 +76,8 @@ function MessageBubble({ msg, isMe }: { msg: DirectMessage; isMe: boolean }) {
 
 export default function MessagesPage() {
   const navigate = useNavigate();
-  const { localSession, isLocalLoggedIn, logoutLocal } = useLocalAuth();
+  const { localSession, isLocalLoggedIn, logoutLocal, sessionValidated } =
+    useLocalAuth();
   const { actor } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
 
@@ -104,10 +105,10 @@ export default function MessagesPage() {
 
   // Auth guard
   useEffect(() => {
-    if (!isLocalLoggedIn) {
+    if (sessionValidated && !isLocalLoggedIn) {
       navigate({ to: "/login" });
     }
-  }, [isLocalLoggedIn, navigate]);
+  }, [sessionValidated, isLocalLoggedIn, navigate]);
 
   // Check URL param for pre-selected user
   useEffect(() => {
@@ -136,9 +137,14 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [fetchOnline]);
 
-  // Fetch conversations
+  // Fetch conversations — keep loading state true until actor is ready
   const fetchConversations = useCallback(async () => {
-    if (!isLocalLoggedIn || !localSession || !extActor) return;
+    if (!isLocalLoggedIn || !localSession) return;
+    if (!extActor) {
+      // Actor not ready yet; mark loading done to avoid stuck state
+      setIsLoadingConvos(false);
+      return;
+    }
     try {
       const convos = await extActor.getConversations(localSession.token);
       setConversations(
@@ -153,7 +159,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     fetchConversations();
-    const interval = setInterval(fetchConversations, 5_000);
+    const interval = setInterval(fetchConversations, 3_000);
     return () => clearInterval(interval);
   }, [fetchConversations]);
 
@@ -178,7 +184,7 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!selectedUser) return;
     fetchMessages();
-    const interval = setInterval(fetchMessages, 2_000);
+    const interval = setInterval(fetchMessages, 1_500);
     return () => clearInterval(interval);
   }, [selectedUser, fetchMessages]);
 
