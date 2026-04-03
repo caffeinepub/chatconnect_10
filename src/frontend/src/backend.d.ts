@@ -142,6 +142,13 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface ProfileWithSocial {
+    profile?: LocalUser;
+    followerCount: bigint;
+    followingCount: bigint;
+    isFollowing: boolean;
+    isVerified: boolean;
+}
 export interface backendInterface {
     acceptCallRequest(id: bigint): Promise<void>;
     acceptCallRequestAsLocal(token: SessionToken, id: bigint): Promise<void>;
@@ -200,6 +207,13 @@ export interface backendInterface {
         visitors: Array<string>;
         count: bigint;
     }>;
+    getProfileWithSocial(token: SessionToken, targetUsername: string): Promise<{
+        profile: LocalUser | undefined;
+        followerCount: bigint;
+        followingCount: bigint;
+        isFollowing: boolean;
+        isVerified: boolean;
+    }>;
     getPublicProfileSettings(username: string): Promise<ProfileSettings>;
     getUnreadDMCount(token: SessionToken): Promise<bigint>;
     getUser(principal: Principal): Promise<User | null>;
@@ -220,7 +234,7 @@ export interface backendInterface {
     leaveVoiceChannel(token: SessionToken): Promise<void>;
     likePost(postId: bigint): Promise<void>;
     likePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
-    loginLocalAccount(username: string, passwordHash: string): Promise<SessionToken>;
+    loginLocalAccount(username: string, passwordHash: string): Promise<{ token: SessionToken; isAdmin: boolean }>;
     logoutLocalAccount(token: SessionToken): Promise<void>;
     markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;

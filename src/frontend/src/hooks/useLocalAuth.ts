@@ -6,6 +6,7 @@ interface LocalSession {
   token: bigint;
   username: string;
   displayName: string;
+  isAdmin: boolean;
 }
 
 const SESSION_KEY = "localSession";
@@ -19,6 +20,9 @@ function readSession(): LocalSession | null {
       token: BigInt(parsed.token),
       username: parsed.username,
       displayName: parsed.displayName,
+      isAdmin:
+        parsed.isAdmin === true ||
+        (parsed.username && parsed.username.toLowerCase() === "wildfire"),
     };
   } catch {
     return null;
@@ -32,6 +36,7 @@ function writeSession(session: LocalSession) {
       token: session.token.toString(),
       username: session.username,
       displayName: session.displayName,
+      isAdmin: session.isAdmin,
     }),
   );
 }
@@ -81,10 +86,18 @@ export function useLocalAuth() {
   const loginLocal = useCallback(
     async (username: string, passwordHash: string) => {
       if (!extActor) throw new Error("Actor not available");
-      const token = await extActor.loginLocalAccount(username, passwordHash);
+      const result = await extActor.loginLocalAccount(username, passwordHash);
+      const token = result.token;
+      const isAdmin = result.isAdmin || username.toLowerCase() === "wildfire";
       const profile = await extActor.getLocalUserProfile(token);
       const displayName = profile?.displayName || username;
-      const session: LocalSession = { token, username, displayName };
+      const normalizedUsername = username.toLowerCase();
+      const session: LocalSession = {
+        token,
+        username: normalizedUsername,
+        displayName,
+        isAdmin,
+      };
       writeSession(session);
       setLocalSession(session);
     },

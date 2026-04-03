@@ -126,6 +126,7 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actorReadyRef = useRef(false);
+  const isFetchingConvosRef = useRef(false); // debounce guard for concurrent fetchConversations
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -182,6 +183,9 @@ export default function MessagesPage() {
       // Actor not ready; keep loading state until it becomes available
       return;
     }
+    // Debounce: skip if a fetch is already in flight
+    if (isFetchingConvosRef.current) return;
+    isFetchingConvosRef.current = true;
     try {
       const convos = await extActor.getConversations(localSession.token);
       setConversations(
@@ -190,6 +194,7 @@ export default function MessagesPage() {
     } catch {
       // ignore
     } finally {
+      isFetchingConvosRef.current = false;
       setIsLoadingConvos(false);
     }
   }, [isLocalLoggedIn, localSession, extActor, actorFetching]);
@@ -201,7 +206,7 @@ export default function MessagesPage() {
       return;
     }
     fetchConversations();
-    const interval = setInterval(fetchConversations, 3_000);
+    const interval = setInterval(fetchConversations, 1_500);
     return () => clearInterval(interval);
   }, [fetchConversations, extActor, actorFetching]);
 

@@ -293,6 +293,13 @@ export interface backendInterface {
         visitors: Array<string>;
         count: bigint;
     }>;
+    getProfileWithSocial(token: SessionToken, targetUsername: string): Promise<{
+        profile: LocalUser | undefined;
+        followerCount: bigint;
+        followingCount: bigint;
+        isFollowing: boolean;
+        isVerified: boolean;
+    }>;
     getPublicProfileSettings(username: string): Promise<ProfileSettings>;
     getUnreadDMCount(token: SessionToken): Promise<bigint>;
     getUser(principal: Principal): Promise<User | null>;
@@ -313,7 +320,7 @@ export interface backendInterface {
     leaveVoiceChannel(token: SessionToken): Promise<void>;
     likePost(postId: bigint): Promise<void>;
     likePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
-    loginLocalAccount(username: string, passwordHash: string): Promise<SessionToken>;
+    loginLocalAccount(username: string, passwordHash: string): Promise<{ token: SessionToken; isAdmin: boolean }>;
     logoutLocalAccount(token: SessionToken): Promise<void>;
     markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
@@ -1206,6 +1213,38 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getProfileWithSocial(arg0: SessionToken, arg1: string): Promise<{
+        profile: LocalUser | undefined;
+        followerCount: bigint;
+        followingCount: bigint;
+        isFollowing: boolean;
+        isVerified: boolean;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProfileWithSocial(arg0, arg1) as any;
+                return {
+                    profile: result.profile?.[0] ?? result.profile ?? undefined,
+                    followerCount: result.followerCount as bigint,
+                    followingCount: result.followingCount as bigint,
+                    isFollowing: result.isFollowing === true,
+                    isVerified: result.isVerified === true,
+                };
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProfileWithSocial(arg0, arg1) as any;
+            return {
+                profile: result.profile?.[0] ?? result.profile ?? undefined,
+                followerCount: result.followerCount as bigint,
+                followingCount: result.followingCount as bigint,
+                isFollowing: result.isFollowing === true,
+                isVerified: result.isVerified === true,
+            };
+        }
+    }
     async getPublicProfileSettings(arg0: string): Promise<ProfileSettings> {
         if (this.processError) {
             try {
@@ -1486,18 +1525,26 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async loginLocalAccount(arg0: string, arg1: string): Promise<SessionToken> {
+    async loginLocalAccount(arg0: string, arg1: string): Promise<{ token: SessionToken; isAdmin: boolean }> {
         if (this.processError) {
             try {
-                const result = await this.actor.loginLocalAccount(arg0, arg1);
-                return result;
+                const result = await this.actor.loginLocalAccount(arg0, arg1) as any;
+                // Backend returns { token; isAdmin } record
+                if (result && typeof result === 'object' && 'token' in result) {
+                    return { token: result.token as SessionToken, isAdmin: result.isAdmin === true };
+                }
+                // Fallback for old backend returning bare SessionToken
+                return { token: result as SessionToken, isAdmin: false };
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.loginLocalAccount(arg0, arg1);
-            return result;
+            const result = await this.actor.loginLocalAccount(arg0, arg1) as any;
+            if (result && typeof result === 'object' && 'token' in result) {
+                return { token: result.token as SessionToken, isAdmin: result.isAdmin === true };
+            }
+            return { token: result as SessionToken, isAdmin: false };
         }
     }
     async logoutLocalAccount(arg0: SessionToken): Promise<void> {

@@ -59,6 +59,7 @@ export function AdminPanel({
 }: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUserInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [actionLoading, setActionLoading] = useState<Record<string, string>>(
     {},
@@ -66,17 +67,31 @@ export function AdminPanel({
   // Track which user's ban picker is open
   const [banPickerUser, setBanPickerUser] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (retries = 3) => {
     if (!extActor) return;
     setLoading(true);
-    try {
-      const all = await extActor.getAllUsersForAdmin(token);
-      setUsers(all);
-    } catch {
-      toast.error("Failed to load users");
-    } finally {
-      setLoading(false);
+    setFetchError(null);
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const all = await extActor.getAllUsersForAdmin(token);
+        // Sort by username for deterministic order
+        setUsers([...all].sort((a, b) => a.username.localeCompare(b.username)));
+        setFetchError(null);
+        setLoading(false);
+        return;
+      } catch (err: any) {
+        if (attempt < retries - 1) {
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        } else {
+          const msg = err?.message?.includes("Unauthorized")
+            ? "Not authorized. Make sure you are logged in as WILDFIRE."
+            : "Failed to load users. Tap Retry to try again.";
+          setFetchError(msg);
+          toast.error(msg);
+        }
+      }
     }
+    setLoading(false);
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: fetchUsers is stable within render
@@ -218,6 +233,19 @@ export function AdminPanel({
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin text-amber-400 mx-auto mb-2" />
               <p className="text-white/50 text-sm">Loading members...</p>
+            </div>
+          </div>
+        ) : fetchError ? (
+          <div className="flex-1 flex items-center justify-center px-6">
+            <div className="text-center space-y-3">
+              <p className="text-red-400 text-sm">{fetchError}</p>
+              <Button
+                size="sm"
+                onClick={() => fetchUsers()}
+                className="bg-amber-400 hover:bg-amber-500 text-black font-bold"
+              >
+                Retry
+              </Button>
             </div>
           </div>
         ) : (

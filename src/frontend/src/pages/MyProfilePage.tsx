@@ -82,6 +82,11 @@ export default function MyProfilePage() {
   const [viewedUserStatus, setViewedUserStatus] = useState<string>("");
   const [viewedUserVerified, setViewedUserVerified] = useState(false);
   const [viewedUserIsAdmin, setViewedUserIsAdmin] = useState(false);
+  const [viewedUserFollowerCount, setViewedUserFollowerCount] =
+    useState<number>(0);
+  const [viewedUserFollowingCount, setViewedUserFollowingCount] =
+    useState<number>(0);
+  const [_viewedUserIsFollowing, setViewedUserIsFollowing] = useState(false);
 
   const [profile, setProfile] = useState<LocalUser | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -105,7 +110,9 @@ export default function MyProfilePage() {
 
   // Admin panel
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
-  const isAdmin = localSession?.username?.toUpperCase() === "WILDFIRE";
+  const isAdmin =
+    localSession?.isAdmin === true ||
+    localSession?.username?.toLowerCase() === "wildfire";
 
   // Settings dialog
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -133,29 +140,71 @@ export default function MyProfilePage() {
 
   // Load the viewed user's data when viewingUser is set
   useEffect(() => {
-    if (!viewingUser || !extActor) return;
+    if (!viewingUser || !extActor || !localSession) return;
+    // Use getProfileWithSocial to get profile + follower counts in one call
     extActor
-      .getLocalUsers()
-      .then((users) => {
-        const found = users.find(
-          (u) => u.username === viewingUser || u.displayName === viewingUser,
-        );
+      .getProfileWithSocial(localSession.token, viewingUser)
+      .then(async (result) => {
+        const found = result.profile;
         if (found) {
           setViewedUserProfile(found);
-          setViewedUserIsAdmin(found.username.toUpperCase() === "WILDFIRE");
-          Promise.all([
+          setViewedUserIsAdmin(found.username.toLowerCase() === "wildfire");
+          setViewedUserVerified(result.isVerified);
+          setViewedUserFollowerCount(Number(result.followerCount));
+          setViewedUserFollowingCount(Number(result.followingCount));
+          setViewedUserIsFollowing(result.isFollowing);
+          const [b, s] = await Promise.all([
             extActor.getUserBio(found.username).catch(() => ""),
             extActor.getUserStatus(found.username).catch(() => ""),
-            extActor.isUserVerified(found.username).catch(() => false),
-          ]).then(([b, s, v]) => {
-            setViewedUserBio(b ?? "");
-            setViewedUserStatus(s ?? "");
-            setViewedUserVerified(v);
-          });
+          ]);
+          setViewedUserBio(b ?? "");
+          setViewedUserStatus(s ?? "");
         }
       })
-      .catch(() => {});
-  }, [viewingUser, extActor]);
+      .catch(() => {
+        // Fallback: try getLocalUsers if getProfileWithSocial is not available
+        extActor
+          .getLocalUsers()
+          .then((users) => {
+            const found = users.find(
+              (u) =>
+                u.username === viewingUser || u.displayName === viewingUser,
+            );
+            if (found) {
+              setViewedUserProfile(found);
+              setViewedUserIsAdmin(found.username.toLowerCase() === "wildfire");
+              Promise.all([
+                extActor.getUserBio(found.username).catch(() => ""),
+                extActor.getUserStatus(found.username).catch(() => ""),
+                extActor.isUserVerified(found.username).catch(() => false),
+              ]).then(([b, s, v]) => {
+                setViewedUserBio(b ?? "");
+                setViewedUserStatus(s ?? "");
+                setViewedUserVerified(v);
+              });
+              // Also fetch follower/following counts for the viewed user
+              if (localSession) {
+                Promise.all([
+                  extActor
+                    .getFollowers(localSession.token, found.username)
+                    .catch(() => [] as string[]),
+                  extActor
+                    .getFollowing(localSession.token, found.username)
+                    .catch(() => [] as string[]),
+                  extActor
+                    .isFollowing(localSession.token, found.username)
+                    .catch(() => false),
+                ]).then(([frs, fng, isF]) => {
+                  setViewedUserFollowerCount(frs.length);
+                  setViewedUserFollowingCount(fng.length);
+                  setViewedUserIsFollowing(isF);
+                });
+              }
+            }
+          })
+          .catch(() => {});
+      });
+  }, [viewingUser, extActor, localSession]);
 
   useEffect(() => {
     if (sessionValidated && !isLocalLoggedIn) {
@@ -461,6 +510,21 @@ export default function MyProfilePage() {
                       {viewedUserBio}
                     </p>
                   )}
+                </div>
+                {/* Follower / Following counts for viewed user */}
+                <div className="flex gap-6 mt-3 mb-1">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-foreground">
+                      {viewedUserFollowerCount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Followers</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-foreground">
+                      {viewedUserFollowingCount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Following</p>
+                  </div>
                 </div>
                 <div className="flex gap-2 mt-4">
                   <Button

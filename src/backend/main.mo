@@ -26,6 +26,7 @@ actor {
   let comments = Map.empty<Nat, Comment>();
   let notifications = Map.empty<Nat, Notification>();
   let directMessages = Map.empty<Nat, DirectMessage>();
+  let conversationIndex = Map.empty<Text, Set.Set<Text>>();
   let verifiedUsers = Set.empty<Text>();
   let bannedUsers = Set.empty<Text>();
   let banExpiry = Map.empty<Text, Time.Time>();
@@ -267,7 +268,7 @@ actor {
       case (null) { Set.empty<Text>() };
     };
     if (myFollowing.contains(targetUsername)) {
-      Runtime.trap("Already following");
+      return; // Idempotent: already following, no-op
     };
     myFollowing.add(targetUsername);
     following.add(username, myFollowing);
@@ -289,7 +290,7 @@ actor {
       case (null) { Set.empty<Text>() };
     };
     if (not myFollowing.contains(targetUsername)) {
-      Runtime.trap("Not following");
+      return; // Idempotent: not following, no-op
     };
     myFollowing.remove(targetUsername);
     following.add(username, myFollowing);
@@ -609,6 +610,17 @@ actor {
       isRead = false;
     };
     directMessages.add(id, dm);
+    // Update conversationIndex for both users (idempotent Set.add)
+    let senderConvs = switch (conversationIndex.get(senderUsername)) {
+      case (?s) { s };
+      case (null) { let s = Set.empty<Text>(); conversationIndex.add(senderUsername, s); s };
+    };
+    senderConvs.add(recipientUsername);
+    let recipientConvs = switch (conversationIndex.get(recipientUsername)) {
+      case (?s) { s };
+      case (null) { let s = Set.empty<Text>(); conversationIndex.add(recipientUsername, s); s };
+    };
+    recipientConvs.add(senderUsername);
     id;
   };
 
@@ -634,22 +646,20 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
-    let myDms = directMessages.values().toArray().filter(
-      func(dm : DirectMessage) : Bool {
-        dm.senderUsername == username or dm.recipientUsername == username
-      }
-    );
-    let convMap = Map.empty<Text, (Text, Time.Time, Nat, Text, Bool)>();
-    for (dm in myDms.values()) {
-      let other = if (dm.senderUsername == username) { dm.recipientUsername } else { dm.senderUsername };
-      // Skip blocked users
-      if (areUsersBlocked(username, other)) {
-        // Continue to next iteration
-      } else {
+    // Use conversationIndex for O(1) partner lookup instead of O(n) full scan
+    let partners : [Text] = switch (conversationIndex.get(username)) {
+      case (?s) { s.toArray() };
+      case (null) { [] };
+    };
+    let result = Map.empty<Text, (Text, Time.Time, Nat, Text, Bool)>();
+    // Only scan messages for known conversation partners
+    for (dm in directMessages.values().toArray().values()) {
+      let other = if (dm.senderUsername == username) { dm.recipientUsername } else if (dm.recipientUsername == username) { dm.senderUsername } else { "" };
+      if (other == "") { /* skip unrelated */ } else if (areUsersBlocked(username, other)) { /* skip blocked */ } else {
         let unreadIncrement = if (dm.recipientUsername == username and not dm.isRead) { 1 } else { 0 };
-        switch (convMap.get(other)) {
+        switch (result.get(other)) {
           case (null) {
-            convMap.add(other, (dm.text, dm.timestamp, unreadIncrement, dm.senderUsername, dm.isRead));
+            result.add(other, (dm.text, dm.timestamp, unreadIncrement, dm.senderUsername, dm.isRead));
           };
           case (?(lastMsg, lastTs, unread, lastSender, lastRead)) {
             let isNewer = dm.timestamp > lastTs;
@@ -657,12 +667,12 @@ actor {
             let newMsg = if (isNewer) { dm.text } else { lastMsg };
             let newSender = if (isNewer) { dm.senderUsername } else { lastSender };
             let newRead = if (isNewer) { dm.isRead } else { lastRead };
-            convMap.add(other, (newMsg, newTs, unread + unreadIncrement, newSender, newRead));
+            result.add(other, (newMsg, newTs, unread + unreadIncrement, newSender, newRead));
           };
         };
       };
     };
-    convMap.entries().toArray().map(
+    result.entries().toArray().map(
       func((other, (lastMsg, lastTs, unread, lastSender, lastRead)) : (Text, (Text, Time.Time, Nat, Text, Bool))) : ConversationSummary {
         let displayName = switch (localUsers.get(other)) {
           case (?u) { u.displayName };
@@ -1492,38 +1502,41 @@ actor {
     age : Nat,
     photo : ?Storage.ExternalBlob,
   ) : async () {
-    if (localUsers.containsKey(username)) {
+    let normalizedUsername = username.toLower();
+    if (localUsers.containsKey(normalizedUsername)) {
       Runtime.trap("Username already exists");
     };
-    let localUser : LocalUser = { username; passwordHash; displayName; age; photo; lastNameChange = null };
-    localUsers.add(username, localUser);
+    let localUser : LocalUser = { username = normalizedUsername; passwordHash; displayName; age; photo; lastNameChange = null };
+    localUsers.add(normalizedUsername, localUser);
   };
 
-  public shared func loginLocalAccount(username : Text, passwordHash : Text) : async SessionToken {
-    let localUser = switch (localUsers.get(username)) {
+  public shared func loginLocalAccount(username : Text, passwordHash : Text) : async { token : SessionToken; isAdmin : Bool } {
+    let normalizedUsername = username.toLower();
+    let localUser = switch (localUsers.get(normalizedUsername)) {
       case (?u) { u };
       case (null) { Runtime.trap("Invalid username or password") };
     };
     if (localUser.passwordHash != passwordHash) {
       Runtime.trap("Invalid username or password");
     };
-    if (bannedUsers.contains(username)) {
+    if (bannedUsers.contains(normalizedUsername)) {
       // Check if ban has expired
-      let stillBanned = switch (banExpiry.get(username)) {
+      let stillBanned = switch (banExpiry.get(normalizedUsername)) {
         case (?expiry) { Time.now() < expiry };
         case (null) { true };
       };
       if (stillBanned) {
         Runtime.trap("Your account has been banned by an admin");
       } else {
-        bannedUsers.remove(username);
-        banExpiry.remove(username);
+        bannedUsers.remove(normalizedUsername);
+        banExpiry.remove(normalizedUsername);
       };
     };
     let token = nextTokenId;
     nextTokenId += 1;
-    sessions.add(token, username);
-    token;
+    sessions.add(token, normalizedUsername);
+    let isAdmin = normalizedUsername == "wildfire";
+    { token; isAdmin };
   };
 
   public query func validateSessionToken(token : SessionToken) : async ?Text {
@@ -1709,7 +1722,7 @@ actor {
 
   func isWildfireToken(token : SessionToken) : Bool {
     switch (validateToken(token)) {
-      case (?username) { username == "WILDFIRE" };
+      case (?username) { username.toLower() == "wildfire" };
       case (null) { false };
     };
   };
@@ -1760,13 +1773,14 @@ actor {
     if (not isWildfireToken(token)) {
       Runtime.trap("Unauthorized: Only the admin can ban users");
     };
-    if (targetUsername == "WILDFIRE") {
+    let normalizedTarget = targetUsername.toLower();
+    if (normalizedTarget == "wildfire") {
       Runtime.trap("Cannot ban the admin account");
     };
-    if (not localUsers.containsKey(targetUsername)) {
+    if (not localUsers.containsKey(normalizedTarget)) {
       Runtime.trap("User not found");
     };
-    bannedUsers.add(targetUsername);
+    bannedUsers.add(normalizedTarget);
     // Invalidate all sessions for this user
     for ((t, u) in sessions.entries().toArray().values()) {
       if (u == targetUsername) { sessions.remove(t) };
@@ -1816,7 +1830,7 @@ actor {
     if (not isWildfireToken(token)) {
       Runtime.trap("Unauthorized: Only the admin can view all user data");
     };
-    localUsers.entries().toArray().map(
+    let unsorted = localUsers.entries().toArray().map(
       func((username, user) : (Text, LocalUser)) : AdminUserInfo {
         {
           username;
@@ -1827,6 +1841,9 @@ actor {
         };
       }
     );
+    unsorted.sort(func(a : AdminUserInfo, b : AdminUserInfo) : { #less; #equal; #greater } {
+      a.username.compare(b.username)
+    });
   };
 
   public func verifyUser() : async () { Runtime.trap("Deprecated: use grantVerifiedBadge") };
@@ -1878,6 +1895,35 @@ actor {
       photo = profile.photo;
     };
     users.add(caller, updatedUser);
+  };
+
+  // ---- Profile With Social (follower + following counts in one call) ----
+
+  public query func getProfileWithSocial(token : SessionToken, targetUsername : Text) : async {
+    profile : ?LocalUser;
+    followerCount : Nat;
+    followingCount : Nat;
+    isFollowing : Bool;
+    isVerified : Bool;
+  } {
+    let callerUsername = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let profile = localUsers.get(targetUsername);
+    let followerCount = switch (followers.get(targetUsername)) {
+      case (?f) { f.size() };
+      case (null) { 0 };
+    };
+    let followingCount = switch (following.get(targetUsername)) {
+      case (?f) { f.size() };
+      case (null) { 0 };
+    };
+    let isFollowingTarget = switch (following.get(callerUsername)) {
+      case (?f) { f.contains(targetUsername) };
+      case (null) { false };
+    };
+    { profile; followerCount; followingCount; isFollowing = isFollowingTarget; isVerified = verifiedUsers.contains(targetUsername) };
   };
 
   // ---- Profile Visit Counter ----
@@ -1945,6 +1991,7 @@ actor {
   stable var stableBanExpiry : [(Text, Time.Time)] = [];
   stable var stableFollowers : [(Text, [Text])] = [];
   stable var stableFollowing : [(Text, [Text])] = [];
+  stable var stableConversationIndex : [(Text, [Text])] = [];
   stable var stableBlockList : [(Text, [Text])] = [];
   stable var stableProfileSettings : [(Text, ProfileSettings)] = [];
   stable var stableCallTopics : [(Text, Text)] = [];
@@ -1977,6 +2024,11 @@ actor {
       tmpFollowing := tmpFollowing.concat([(k, v.toArray())]);
     };
     stableFollowing := tmpFollowing;
+    var tmpConversationIndex : [(Text, [Text])] = [];
+    for ((k, v) in conversationIndex.entries()) {
+      tmpConversationIndex := tmpConversationIndex.concat([(k, v.toArray())]);
+    };
+    stableConversationIndex := tmpConversationIndex;
     var tmpBlockList : [(Text, [Text])] = [];
     for ((k, v) in blockList.entries()) {
       tmpBlockList := tmpBlockList.concat([(k, v.toArray())]);
@@ -2024,6 +2076,11 @@ actor {
       for (u in arr.values()) { s.add(u) };
       following.add(k, s);
     };
+    for ((k, arr) in stableConversationIndex.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      conversationIndex.add(k, s);
+    };
     for ((k, arr) in stableBlockList.values()) {
       let s = Set.empty<Text>();
       for (u in arr.values()) { s.add(u) };
@@ -2066,6 +2123,7 @@ actor {
     stableBanExpiry := [];
     stableFollowers := [];
     stableFollowing := [];
+    stableConversationIndex := [];
     stableBlockList := [];
     stableProfileSettings := [];
     stableCallTopics := [];
