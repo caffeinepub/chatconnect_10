@@ -55,7 +55,11 @@ const ICE_SERVERS = [
 
 export type MicPermission = "unknown" | "granted" | "denied" | "prompt";
 
-export function useVoiceChat(token: bigint | null, myUsername: string | null) {
+export function useVoiceChat(
+  token: bigint | null,
+  myUsername: string | null,
+  roomId = "lobby",
+) {
   const { actor } = useActor();
   const voiceActor = actor as backendInterface | null;
 
@@ -88,6 +92,11 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
   const processedSignalIds = useRef<Set<string>>(new Set());
   // Keep a ref to the latest processSignals so the interval always calls the fresh version
   const processSignalsRef = useRef<() => Promise<void>>(async () => {});
+  // Store roomId in a ref so callbacks always see the current value
+  const roomIdRef = useRef(roomId);
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
 
   // Check microphone permission on mount
   useEffect(() => {
@@ -173,12 +182,12 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       pc.onicecandidate = async (event) => {
         if (event.candidate && voiceActor && token) {
           try {
-            await voiceActor.sendSignal(
-              token,
-              username,
-              "ice",
-              JSON.stringify(event.candidate),
-            );
+            // Wrap ICE candidate with room tag for isolation
+            const payload = JSON.stringify({
+              room: roomIdRef.current,
+              payload: JSON.stringify(event.candidate),
+            });
+            await voiceActor.sendSignal(token, username, "ice", payload);
           } catch {
             // ignore
           }
@@ -218,12 +227,11 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
                 addLocalTracks(newPc);
                 const offer = await newPc.createOffer();
                 await newPc.setLocalDescription(offer);
-                await voiceActor.sendSignal(
-                  token,
-                  username,
-                  "offer",
-                  JSON.stringify(offer),
-                );
+                const payload = JSON.stringify({
+                  room: roomIdRef.current,
+                  payload: JSON.stringify(offer),
+                });
+                await voiceActor.sendSignal(token, username, "offer", payload);
               } catch {
                 // ignore
               }
@@ -261,6 +269,25 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     [],
   );
 
+  // Helper: parse the room-tagged signal wrapper. Returns null if wrong room.
+  const parseRoomSignal = useCallback((rawData: string): string | null => {
+    try {
+      const wrapper = JSON.parse(rawData) as {
+        room?: string;
+        payload?: string;
+      };
+      if (wrapper.room !== undefined) {
+        // Room-tagged signal — check if it belongs to our room
+        if (wrapper.room !== roomIdRef.current) return null;
+        return wrapper.payload ?? rawData;
+      }
+      // Legacy signal without room tag — accept as-is (backward compat)
+      return rawData;
+    } catch {
+      return rawData;
+    }
+  }, []);
+
   const processSignals = useCallback(async () => {
     if (!voiceActor || !token || !myUsername || !isInChannelRef.current) return;
     try {
@@ -268,6 +295,10 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
       for (const signal of signals) {
         const from = signal.fromUsername;
         if (from === myUsername) continue;
+
+        // Parse the room wrapper — skip if it belongs to a different room
+        const innerData = parseRoomSignal(signal.data);
+        if (innerData === null) continue;
 
         // Build a unique key for this signal to avoid reprocessing
         const sigKey = `${from}:${signal.signalType}:${signal.data.slice(0, 100)}`;
@@ -296,7 +327,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
               addLocalTracks(activePc);
             }
             try {
-              const offer = JSON.parse(signal.data);
+              const offer = JSON.parse(innerData);
               await activePc.setRemoteDescription(
                 new RTCSessionDescription(offer),
               );
@@ -304,11 +335,16 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
               const answer = await activePc.createAnswer();
               await activePc.setLocalDescription(answer);
               try {
+                // Wrap answer with room tag
+                const answerPayload = JSON.stringify({
+                  room: roomIdRef.current,
+                  payload: JSON.stringify(answer),
+                });
                 await voiceActor.sendSignal(
                   token,
                   from,
                   "answer",
-                  JSON.stringify(answer),
+                  answerPayload,
                 );
               } catch {
                 // ignore
@@ -321,7 +357,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
           const pc = peerConnections.current.get(from);
           if (pc && pc.signalingState === "have-local-offer") {
             try {
-              const answer = JSON.parse(signal.data);
+              const answer = JSON.parse(innerData);
               await pc.setRemoteDescription(new RTCSessionDescription(answer));
               await flushPendingIceCandidates(from, pc);
             } catch {
@@ -331,7 +367,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         } else if (signal.signalType === "ice") {
           const pc = peerConnections.current.get(from);
           if (pc && pc.signalingState !== "closed") {
-            const candidate = JSON.parse(signal.data) as RTCIceCandidateInit;
+            const candidate = JSON.parse(innerData) as RTCIceCandidateInit;
             if (!pc.remoteDescription) {
               const pending = pendingIceCandidates.current.get(from) ?? [];
               pending.push(candidate);
@@ -356,6 +392,7 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     createPeerConnection,
     addLocalTracks,
     flushPendingIceCandidates,
+    parseRoomSignal,
   ]);
 
   // Keep the ref always pointing to the latest version
@@ -519,6 +556,18 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
     processedSignalIds.current.clear();
     toast.success("Joined voice channel!");
 
+    // Announce room join (best-effort, non-critical)
+    try {
+      await voiceActor.sendSignal(
+        token,
+        "__lobby__",
+        "join",
+        JSON.stringify({ room: roomIdRef.current, username: myUsername }),
+      );
+    } catch {
+      // ignore
+    }
+
     // Set MediaSession so audio plays in background / lock screen
     try {
       if (navigator.mediaSession) {
@@ -540,11 +589,15 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
         addLocalTracks(pc);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
+        const offerPayload = JSON.stringify({
+          room: roomIdRef.current,
+          payload: JSON.stringify(offer),
+        });
         await voiceActor.sendSignal(
           token,
           participant.username,
           "offer",
-          JSON.stringify(offer),
+          offerPayload,
         );
       } catch {
         // ignore per-peer errors
@@ -572,11 +625,15 @@ export function useVoiceChat(token: bigint | null, myUsername: string | null) {
               addLocalTracks(pc);
               const offer = await pc.createOffer();
               await pc.setLocalDescription(offer);
+              const offerPayload = JSON.stringify({
+                room: roomIdRef.current,
+                payload: JSON.stringify(offer),
+              });
               await voiceActor.sendSignal(
                 token,
                 p.username,
                 "offer",
-                JSON.stringify(offer),
+                offerPayload,
               );
             } catch {
               // ignore
