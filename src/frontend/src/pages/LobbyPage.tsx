@@ -149,10 +149,11 @@ export default function LobbyPage() {
       navigate({ to: "/setup" });
   }, [identity, profileLoading, myProfile, navigate]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages (dep is intentionally empty - we run on every render deliberately)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional scroll on message change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  });
+  }, [localMessages]);
 
   const messages = isLocalLoggedIn ? localMessages : iiMessages;
 

@@ -127,6 +127,8 @@ export default function MessagesPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actorReadyRef = useRef(false);
   const isFetchingConvosRef = useRef(false); // debounce guard for concurrent fetchConversations
+  const isFetchingMsgsRef = useRef(false); // debounce guard for concurrent fetchMessages
+  const lastSelectedUserRef = useRef<string | null>(null); // track which user messages belong to
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -155,6 +157,7 @@ export default function MessagesPage() {
     const user = params.get("user");
     if (user) {
       setSelectedUser(user);
+      lastSelectedUserRef.current = user;
       setIsMobileThread(true);
     }
   }, []);
@@ -191,8 +194,8 @@ export default function MessagesPage() {
       setConversations(
         [...convos].sort((a, b) => Number(b.lastTimestamp - a.lastTimestamp)),
       );
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[MessagesPage] fetchConversations failed:", err);
     } finally {
       isFetchingConvosRef.current = false;
       setIsLoadingConvos(false);
@@ -213,18 +216,29 @@ export default function MessagesPage() {
   // Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession || !extActor || !selectedUser) return;
+    if (isFetchingMsgsRef.current) return; // skip if already in flight
+    isFetchingMsgsRef.current = true;
+    const fetchingFor = selectedUser; // capture which user we're fetching for
     try {
       const msgs = await extActor.getDirectMessages(
         localSession.token,
         selectedUser,
       );
-      setMessages([...msgs].sort((a, b) => Number(a.timestamp - b.timestamp)));
+      // Discard result if user switched conversations while fetch was in flight
+      if (lastSelectedUserRef.current !== fetchingFor) return;
+      setMessages(
+        [...msgs].sort((a, b) =>
+          a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+        ),
+      );
       setTimeout(
         () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
         50,
       );
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[MessagesPage] fetchMessages failed:", err);
+    } finally {
+      isFetchingMsgsRef.current = false;
     }
   }, [isLocalLoggedIn, localSession, extActor, selectedUser]);
 
@@ -248,7 +262,7 @@ export default function MessagesPage() {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
     const pollTyping = async () => {
       try {
-        const typing = await (extActor as any).getTypingStatus(
+        const typing = await extActor.getTypingStatus(
           localSession.token,
           selectedUser,
         );
@@ -265,8 +279,8 @@ export default function MessagesPage() {
   // Load pinned message
   useEffect(() => {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
-    (extActor as any)
-      .getPinnedMessage?.(localSession.token, selectedUser)
+    extActor
+      .getPinnedMessage(localSession.token, selectedUser)
       .then((msg: DirectMessage | null) => {
         if (msg) setPinnedMessage(msg);
       })
@@ -283,12 +297,12 @@ export default function MessagesPage() {
   const handleInputChange = (value: string) => {
     setMessageText(value);
     if (!selectedUser || !localSession || !extActor) return;
-    (extActor as any)
+    extActor
       .setTypingStatus(localSession.token, selectedUser, true)
       .catch(() => {});
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      (extActor as any)
+      extActor
         .setTypingStatus(localSession.token, selectedUser, false)
         .catch(() => {});
     }, 4_000);
@@ -296,6 +310,8 @@ export default function MessagesPage() {
 
   const handleSelectUser = (username: string) => {
     setSelectedUser(username);
+    lastSelectedUserRef.current = username;
+    isFetchingMsgsRef.current = false; // reset so new fetch fires immediately
     setIsMobileThread(true);
     setMessages([]);
     setIsTyping(false);
@@ -313,7 +329,7 @@ export default function MessagesPage() {
     const text = messageText.trim();
     setMessageText("");
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    (extActor as any)
+    extActor
       .setTypingStatus(localSession.token, selectedUser, false)
       .catch(() => {});
     const optimistic: DirectMessage = {
@@ -325,12 +341,14 @@ export default function MessagesPage() {
       isRead: false,
     };
     setMessages((prev) => [...prev, optimistic]);
+    isFetchingMsgsRef.current = false; // allow fetch after send
     setIsSending(true);
     try {
       await extActor.sendDirectMessage(localSession.token, selectedUser, text);
-      // Immediately fetch to replace optimistic with real message
+      // Immediately fetch to replace optimistic with real message and update inbox list
+      isFetchingMsgsRef.current = false; // allow immediate re-fetch
       await fetchMessages();
-      fetchConversations();
+      await fetchConversations();
     } catch {
       // Remove optimistic message on failure
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
@@ -343,7 +361,7 @@ export default function MessagesPage() {
   const handleDeleteMessage = async (msgId: bigint) => {
     if (!localSession || !extActor) return;
     try {
-      await (extActor as any).deleteDirectMessage?.(localSession.token, msgId);
+      await extActor.deleteDirectMessage(localSession.token, msgId);
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     } catch {
       // Ignore if API not available
@@ -353,11 +371,7 @@ export default function MessagesPage() {
   const handlePinMessage = async (msgId: bigint) => {
     if (!selectedUser || !localSession || !extActor) return;
     try {
-      await (extActor as any).pinDirectMessage?.(
-        localSession.token,
-        selectedUser,
-        msgId,
-      );
+      await extActor.pinDirectMessage(localSession.token, selectedUser, msgId);
       const msg = messages.find((m) => m.id === msgId);
       if (msg) setPinnedMessage(msg);
       toast.success("Message pinned");

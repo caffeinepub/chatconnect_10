@@ -36,6 +36,8 @@ actor {
   stable var nextNotificationId : Nat = 0;
   stable var nextDmId : Nat = 0;
   let typingStatus = Map.empty<Text, Time.Time>(); // key: "sender_recipient"
+  let pinnedMessages = Map.empty<Text, Nat>();
+  let userEmails = Map.empty<Text, Text>();
 
   type Message = {
     id : Nat;
@@ -646,28 +648,35 @@ actor {
       case (?u) { u };
       case (null) { Runtime.trap("Unauthorized: Invalid session token") };
     };
-    // Use conversationIndex for O(1) partner lookup instead of O(n) full scan
-    let partners : [Text] = switch (conversationIndex.get(username)) {
-      case (?s) { s.toArray() };
-      case (null) { [] };
-    };
+    // Full scan of all direct messages — always reliable regardless of index state.
+    // conversationIndex is updated on send but we never gate on it here.
     let result = Map.empty<Text, (Text, Time.Time, Nat, Text, Bool)>();
-    // Only scan messages for known conversation partners
     for (dm in directMessages.values().toArray().values()) {
-      let other = if (dm.senderUsername == username) { dm.recipientUsername } else if (dm.recipientUsername == username) { dm.senderUsername } else { "" };
-      if (other == "") { /* skip unrelated */ } else if (areUsersBlocked(username, other)) { /* skip blocked */ } else {
+      let other = if (dm.senderUsername == username) {
+        dm.recipientUsername
+      } else if (dm.recipientUsername == username) {
+        dm.senderUsername
+      } else {
+        "" // not related to this user
+      };
+      if (other == "") {
+        // skip — message not involving this user
+      } else if (areUsersBlocked(username, other)) {
+        // skip — blocked relationship
+      } else {
         let unreadIncrement = if (dm.recipientUsername == username and not dm.isRead) { 1 } else { 0 };
         switch (result.get(other)) {
           case (null) {
             result.add(other, (dm.text, dm.timestamp, unreadIncrement, dm.senderUsername, dm.isRead));
           };
           case (?(lastMsg, lastTs, unread, lastSender, lastRead)) {
-            let isNewer = dm.timestamp > lastTs;
-            let newTs = if (isNewer) { dm.timestamp } else { lastTs };
-            let newMsg = if (isNewer) { dm.text } else { lastMsg };
-            let newSender = if (isNewer) { dm.senderUsername } else { lastSender };
-            let newRead = if (isNewer) { dm.isRead } else { lastRead };
-            result.add(other, (newMsg, newTs, unread + unreadIncrement, newSender, newRead));
+            if (dm.timestamp > lastTs) {
+              // this message is newer — update the summary
+              result.add(other, (dm.text, dm.timestamp, unread + unreadIncrement, dm.senderUsername, dm.isRead));
+            } else {
+              // keep existing newest, just accumulate unread count
+              result.add(other, (lastMsg, lastTs, unread + unreadIncrement, lastSender, lastRead));
+            };
           };
         };
       };
@@ -678,7 +687,15 @@ actor {
           case (?u) { u.displayName };
           case (null) { other };
         };
-        { otherUsername = other; otherDisplayName = displayName; lastMessage = lastMsg; lastTimestamp = lastTs; unreadCount = unread; lastMessageSender = lastSender; lastMessageIsRead = lastRead };
+        {
+          otherUsername = other;
+          otherDisplayName = displayName;
+          lastMessage = lastMsg;
+          lastTimestamp = lastTs;
+          unreadCount = unread;
+          lastMessageSender = lastSender;
+          lastMessageIsRead = lastRead;
+        };
       }
     );
   };
@@ -708,6 +725,134 @@ actor {
         dm.recipientUsername == username and not dm.isRead and not areUsersBlocked(username, dm.senderUsername)
       }
     ).size();
+  };
+
+  // ---- New DM Features ----
+
+  public shared func deleteDirectMessage(token : SessionToken, msgId : Nat) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (directMessages.get(msgId)) {
+      case (?dm) {
+        if (dm.senderUsername != username) {
+          Runtime.trap("Unauthorized: Only the sender can delete this message");
+        };
+        directMessages.remove(msgId);
+      };
+      case (null) { /* already deleted, no-op */ };
+    };
+  };
+
+  // Returns a sorted conversation key "userA_userB" where userA < userB lexicographically
+  func convKey(a : Text, b : Text) : Text {
+    if (a < b) { a # "_" # b } else { b # "_" # a }
+  };
+
+  public shared func pinDirectMessage(token : SessionToken, otherUsername : Text, msgId : Nat) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    // Verify message exists and belongs to this conversation
+    switch (directMessages.get(msgId)) {
+      case (?dm) {
+        let isParticipant = (dm.senderUsername == username or dm.recipientUsername == username) and
+                            (dm.senderUsername == otherUsername or dm.recipientUsername == otherUsername);
+        if (not isParticipant) {
+          Runtime.trap("Unauthorized: Message does not belong to this conversation");
+        };
+      };
+      case (null) { Runtime.trap("Message not found") };
+    };
+    pinnedMessages.add(convKey(username, otherUsername), msgId);
+  };
+
+  public query func getPinnedMessage(token : SessionToken, otherUsername : Text) : async ?DirectMessage {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return null };
+    };
+    switch (pinnedMessages.get(convKey(username, otherUsername))) {
+      case (?msgId) { directMessages.get(msgId) };
+      case (null) { null };
+    };
+  };
+
+  public shared func setTypingStatus(token : SessionToken, otherUsername : Text, isTyping : Bool) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return };
+    };
+    let key = username # "_" # otherUsername;
+    if (isTyping) {
+      typingStatus.add(key, Time.now());
+    } else {
+      typingStatus.remove(key);
+    };
+  };
+
+  public query func getTypingStatus(token : SessionToken, otherUsername : Text) : async Bool {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return false };
+    };
+    // Check if otherUsername is typing to username
+    let key = otherUsername # "_" # username;
+    switch (typingStatus.get(key)) {
+      case (?ts) {
+        // Typing is active if timestamp is within last 5 seconds
+        Time.now() - ts < 5_000_000_000
+      };
+      case (null) { false };
+    };
+  };
+
+  // ---- Matching ----
+
+  public query func getUsersForMatching(token : SessionToken) : async [LocalUser] {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return [] };
+    };
+    let tenMinutesAgo = Time.now() - 600_000_000_000;
+    localUsers.entries().toArray()
+      .filter(func((u, _) : (Text, LocalUser)) : Bool {
+        if (u == username) { return false };
+        if (areUsersBlocked(username, u)) { return false };
+        switch (lastSeen.get(u)) {
+          case (?ts) { ts > tenMinutesAgo };
+          case (null) { false };
+        };
+      })
+      .map(func((_, lu) : (Text, LocalUser)) : LocalUser { lu });
+  };
+
+  // ---- Email / Password Reset ----
+
+  public shared func setUserEmail(token : SessionToken, email : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    userEmails.add(username, email);
+  };
+
+  public shared func resetPasswordAsAdmin(token : SessionToken, targetUsername : Text, newPasswordHash : Text) : async () {
+    if (not isWildfireToken(token)) {
+      Runtime.trap("Unauthorized: Only the admin can reset passwords");
+    };
+    let normalizedTarget = targetUsername.toLower();
+    let user = switch (localUsers.get(normalizedTarget)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("User not found") };
+    };
+    localUsers.add(normalizedTarget, { user with passwordHash = newPasswordHash });
+    // Invalidate all sessions for this user
+    for ((t, u) in sessions.entries().toArray().values()) {
+      if (u == normalizedTarget) { sessions.remove(t) };
+    };
   };
 
   // ---- Voice Channel ----
@@ -1783,7 +1928,7 @@ actor {
     bannedUsers.add(normalizedTarget);
     // Invalidate all sessions for this user
     for ((t, u) in sessions.entries().toArray().values()) {
-      if (u == targetUsername) { sessions.remove(t) };
+      if (u == normalizedTarget) { sessions.remove(t) };
     };
   };
 
@@ -1825,6 +1970,7 @@ actor {
     isVerified : Bool;
     isBanned : Bool;
     banExpiresAt : ?Time.Time;
+    email : ?Text;
   };
 
   public query func getAllUsersForAdmin(token : SessionToken) : async [AdminUserInfo] {
@@ -1839,6 +1985,7 @@ actor {
           isVerified = verifiedUsers.contains(username);
           isBanned = bannedUsers.contains(username);
           banExpiresAt = banExpiry.get(username);
+          email = userEmails.get(username);
         };
       }
     );
@@ -2001,6 +2148,9 @@ actor {
   stable var stableProfileVisitors : [(Text, [Text])] = [];
   stable var stableLastSeen : [(Text, Time.Time)] = [];
   stable var stableLikesFlat : [(Nat, Text, Text)] = [];
+  stable var stablePinnedMessages : [(Text, Nat)] = [];
+  stable var stableTypingStatus : [(Text, Time.Time)] = [];
+  stable var stableUserEmails : [(Text, Text)] = [];
 
   system func preupgrade() {
     stableLocalUsers := localUsers.entries().toArray();
@@ -2045,6 +2195,9 @@ actor {
     };
     stableProfileVisitors := tmpProfileVisitors;
     stableLastSeen := lastSeen.entries().toArray();
+    stablePinnedMessages := pinnedMessages.entries().toArray();
+    stableTypingStatus := typingStatus.entries().toArray();
+    stableUserEmails := userEmails.entries().toArray();
     // Flatten likes: (postId, principal.toText(), displayName)
     var flatLikes : [(Nat, Text, Text)] = [];
     for ((postId, likeMap) in likes.entries()) {
@@ -2097,6 +2250,12 @@ actor {
       profileVisitors.add(k, s);
     };
     for ((k, v) in stableLastSeen.values()) { lastSeen.add(k, v) };
+    for ((k, v) in stablePinnedMessages.values()) { pinnedMessages.add(k, v) };
+    stablePinnedMessages := [];
+    for ((k, v) in stableTypingStatus.values()) { typingStatus.add(k, v) };
+    stableTypingStatus := [];
+    for ((k, v) in stableUserEmails.values()) { userEmails.add(k, v) };
+    stableUserEmails := [];
     // Restore likes
     for ((postId, principalText, name) in stableLikesFlat.values()) {
       let p = Principal.fromText(principalText);
@@ -2126,6 +2285,28 @@ actor {
     stableFollowing := [];
     stableConversationIndex := [];
     stableBlockList := [];
+    // Rebuild conversationIndex from directMessages to fix any corruption or missing entries
+    // This ensures conversations always appear even if the index was lost across upgrades
+    for (dm in directMessages.values().toArray().values()) {
+      let senderSet = switch (conversationIndex.get(dm.senderUsername)) {
+        case (?s) { s };
+        case (null) {
+          let s = Set.empty<Text>();
+          conversationIndex.add(dm.senderUsername, s);
+          s
+        };
+      };
+      senderSet.add(dm.recipientUsername);
+      let recipientSet = switch (conversationIndex.get(dm.recipientUsername)) {
+        case (?s) { s };
+        case (null) {
+          let s = Set.empty<Text>();
+          conversationIndex.add(dm.recipientUsername, s);
+          s
+        };
+      };
+      recipientSet.add(dm.senderUsername);
+    };
     stableProfileSettings := [];
     stableCallTopics := [];
     stableUserBios := [];
@@ -2133,6 +2314,9 @@ actor {
     stableProfileVisitors := [];
     stableLastSeen := [];
     stableLikesFlat := [];
+    stablePinnedMessages := [];
+    stableTypingStatus := [];
+    stableUserEmails := [];
   };
 
 

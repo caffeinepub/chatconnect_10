@@ -7,9 +7,11 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import CallScreen from "./pages/CallScreen";
 import CallingCardsPage from "./pages/CallingCardsPage";
 import FeedPage from "./pages/FeedPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import LandingPage from "./pages/LandingPage";
 import LobbyPage from "./pages/LobbyPage";
 import LoginPage from "./pages/LoginPage";
+import MatchesPage from "./pages/MatchesPage";
 import MessagesPage from "./pages/MessagesPage";
 import MyProfilePage from "./pages/MyProfilePage";
 import NotificationsPage from "./pages/NotificationsPage";
@@ -94,6 +96,18 @@ const videoCallRoute = createRoute({
   component: VideoCallScreen,
 });
 
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forgot-password",
+  component: ForgotPasswordPage,
+});
+
+const matchesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/matches",
+  component: MatchesPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -107,6 +121,8 @@ const routeTree = rootRoute.addChildren([
   messagesRoute,
   notificationsRoute,
   videoCallRoute,
+  forgotPasswordRoute,
+  matchesRoute,
 ]);
 
 const router = createRouter({ routeTree });

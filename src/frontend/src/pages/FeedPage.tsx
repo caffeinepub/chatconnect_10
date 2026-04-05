@@ -613,6 +613,25 @@ export default function FeedPage() {
                   </button>
                 );
               })}
+              {/* Matches card */}
+              <button
+                type="button"
+                onClick={() => navigate({ to: "/matches" })}
+                className="flex-shrink-0 relative rounded-2xl overflow-hidden transition-transform active:scale-95 hover:scale-[1.03]"
+                style={{ width: "120px" }}
+                data-ocid="feed.secondary_button"
+              >
+                <div className="w-full p-3 bg-gradient-to-br from-rose-500 to-pink-600 text-white text-left">
+                  <div className="text-xl mb-1">❤️</div>
+                  <div className="font-semibold text-sm">Matches</div>
+                  <div className="text-[10px] opacity-80">Find people</div>
+                  <div className="mt-2">
+                    <span className="bg-black/20 rounded-full px-2 py-0.5 text-[10px] opacity-90">
+                      Discover
+                    </span>
+                  </div>
+                </div>
+              </button>
             </div>
           </motion.div>
 

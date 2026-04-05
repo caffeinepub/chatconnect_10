@@ -106,6 +106,7 @@ export interface AdminUserInfo {
     banExpiresAt?: Time;
     isVerified: boolean;
     isBanned: boolean;
+    email?: string;
 }
 export interface ProfileSettings {
     hideFollowers: boolean;
@@ -167,6 +168,7 @@ export interface backendInterface {
     deleteCallRequest(id: bigint): Promise<void>;
     deleteComment(id: bigint): Promise<void>;
     deleteCommentAsLocal(token: SessionToken, id: bigint): Promise<void>;
+    deleteDirectMessage(token: SessionToken, msgId: bigint): Promise<void>;
     deletePost(id: bigint): Promise<void>;
     deletePostAsLocal(token: SessionToken, id: bigint): Promise<void>;
     deleteUser(targetUser: Principal): Promise<void>;
@@ -198,6 +200,7 @@ export interface backendInterface {
     getMySignals(token: SessionToken): Promise<Array<Signal>>;
     getNotificationsAsLocal(token: SessionToken): Promise<Array<Notification>>;
     getOnlineUsernames(): Promise<Array<string>>;
+    getPinnedMessage(token: SessionToken, otherUsername: string): Promise<DirectMessage | null>;
     getPostLikes(postId: bigint): Promise<Array<string>>;
     getPostLikesAsLocal(token: SessionToken, postId: bigint): Promise<Array<string>>;
     getPosts(): Promise<Array<Post>>;
@@ -215,6 +218,7 @@ export interface backendInterface {
         isVerified: boolean;
     }>;
     getPublicProfileSettings(username: string): Promise<ProfileSettings>;
+    getTypingStatus(token: SessionToken, otherUsername: string): Promise<boolean>;
     getUnreadDMCount(token: SessionToken): Promise<bigint>;
     getUser(principal: Principal): Promise<User | null>;
     getUserBio(username: string): Promise<string | null>;
@@ -222,6 +226,7 @@ export interface backendInterface {
     getUserStatus(username: string): Promise<string | null>;
     getUsers(): Promise<Array<User>>;
     getUsersCount(): Promise<bigint>;
+    getUsersForMatching(token: SessionToken): Promise<Array<LocalUser>>;
     getVoiceParticipants(token: SessionToken): Promise<Array<VoiceParticipant>>;
     grantVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
     isBlocked(token: SessionToken, targetUsername: string): Promise<boolean>;
@@ -240,8 +245,10 @@ export interface backendInterface {
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
     markNotificationReadAsLocal(token: SessionToken, id: bigint): Promise<void>;
     pingOnline(token: SessionToken): Promise<void>;
+    pinDirectMessage(token: SessionToken, otherUsername: string, msgId: bigint): Promise<void>;
     recordProfileVisit(token: SessionToken, visitedUsername: string): Promise<void>;
     registerLocalAccount(username: string, passwordHash: string, displayName: string, age: bigint, photo: ExternalBlob | null): Promise<void>;
+    resetPasswordAsAdmin(token: SessionToken, targetUsername: string, newPasswordHash: string): Promise<void>;
     revokeVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     sendCallRequest(callee: Principal): Promise<bigint>;
@@ -252,6 +259,8 @@ export interface backendInterface {
     sendSignal(token: SessionToken, toUsername: string, signalType: string, data: string): Promise<void>;
     setCallTopic(token: SessionToken, topic: string): Promise<void>;
     setMicActive(token: SessionToken, active: boolean): Promise<void>;
+    setTypingStatus(token: SessionToken, otherUsername: string, isTyping: boolean): Promise<void>;
+    setUserEmail(token: SessionToken, email: string): Promise<void>;
     setUserStatus(token: SessionToken, status: string): Promise<void>;
     unbanLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     unblockUser(token: SessionToken, targetUsername: string): Promise<void>;
