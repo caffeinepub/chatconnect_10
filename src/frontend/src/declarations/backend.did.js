@@ -20,6 +20,7 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
 export const SessionToken = IDL.Nat;
+export const LoginResult = IDL.Record({ 'token': SessionToken, 'isAdmin': IDL.Bool });
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
@@ -327,7 +328,7 @@ export const idlService = IDL.Service({
   'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
   'likePost' : IDL.Func([IDL.Nat], [], []),
   'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
-  'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [SessionToken], []),
+  'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [LoginResult], []),
   'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
   'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
   'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
@@ -715,7 +716,7 @@ export const idlFactory = ({ IDL }) => {
     'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
     'likePost' : IDL.Func([IDL.Nat], [], []),
     'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
-    'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [SessionToken], []),
+    'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [LoginResult], []),
     'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
     'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
     'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),

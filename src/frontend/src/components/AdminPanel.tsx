@@ -260,7 +260,7 @@ export function AdminPanel({
                 </div>
               ) : (
                 filtered.map((user, i) => {
-                  const isWildfire = user.username === "WILDFIRE";
+                  const isWildfire = user.username.toLowerCase() === "wildfire";
                   const busy = actionLoading[user.username];
                   const initials = user.displayName.slice(0, 2).toUpperCase();
                   const isBanPickerOpen = banPickerUser === user.username;

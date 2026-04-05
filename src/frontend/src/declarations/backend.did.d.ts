@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface LoginResult {
+  'token' : SessionToken,
+  'isAdmin' : boolean,
+}
+
 export interface AdminUserInfo {
   'username' : string,
   'displayName' : string,
@@ -250,7 +255,7 @@ export interface _SERVICE {
   'leaveVoiceChannel' : ActorMethod<[SessionToken], undefined>,
   'likePost' : ActorMethod<[bigint], undefined>,
   'likePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
-  'loginLocalAccount' : ActorMethod<[string, string], SessionToken>,
+  'loginLocalAccount' : ActorMethod<[string, string], { token: SessionToken; isAdmin: boolean }>,
   'logoutLocalAccount' : ActorMethod<[SessionToken], undefined>,
   'markAllNotificationsReadAsLocal' : ActorMethod<[SessionToken], undefined>,
   'markDirectMessagesRead' : ActorMethod<[SessionToken, string], undefined>,

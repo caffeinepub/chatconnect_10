@@ -1792,21 +1792,22 @@ actor {
     if (not isWildfireToken(token)) {
       Runtime.trap("Unauthorized: Only the admin can ban users");
     };
-    if (targetUsername == "WILDFIRE") {
+    let normalizedTarget = targetUsername.toLower();
+    if (normalizedTarget == "wildfire") {
       Runtime.trap("Cannot ban the admin account");
     };
-    if (not localUsers.containsKey(targetUsername)) {
+    if (not localUsers.containsKey(normalizedTarget)) {
       Runtime.trap("User not found");
     };
-    bannedUsers.add(targetUsername);
+    bannedUsers.add(normalizedTarget);
     if (durationNs > 0) {
-      banExpiry.add(targetUsername, Time.now() + durationNs);
+      banExpiry.add(normalizedTarget, Time.now() + durationNs);
     } else {
-      banExpiry.remove(targetUsername);
+      banExpiry.remove(normalizedTarget);
     };
     // Invalidate all sessions for this user
     for ((t, u) in sessions.entries().toArray().values()) {
-      if (u == targetUsername) { sessions.remove(t) };
+      if (u == normalizedTarget) { sessions.remove(t) };
     };
   };
 

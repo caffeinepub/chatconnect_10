@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ExternalBlob } from "../backend";
 import type { backendInterface as ExtendedBackend } from "../backend.d";
 import { useActor } from "../hooks/useActor";
+import { useLocalAuth } from "../hooks/useLocalAuth";
 
 const AVATAR_GRADIENTS = [
   "from-purple-500 to-indigo-600",
@@ -22,6 +23,7 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorLoading } = useActor();
   const extActor = actor as unknown as ExtendedBackend | null;
+  const { loginLocal } = useLocalAuth();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
@@ -88,15 +90,7 @@ export default function SignupPage() {
         BigInt(age),
         photoBlob,
       );
-      const token = await extActor.loginLocalAccount(username, passwordHash);
-      localStorage.setItem(
-        "localSession",
-        JSON.stringify({
-          token: token.toString(),
-          username,
-          displayName,
-        }),
-      );
+      await loginLocal(username, passwordHash);
       toast.success("Account created! Welcome to Wave Chat 🎉");
       navigate({ to: "/lobby" });
     } catch (err: any) {
