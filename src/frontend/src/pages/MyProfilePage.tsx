@@ -87,6 +87,8 @@ export default function MyProfilePage() {
   const [viewedUserFollowingCount, setViewedUserFollowingCount] =
     useState<number>(0);
   const [_viewedUserIsFollowing, setViewedUserIsFollowing] = useState(false);
+  const [viewedUserBadges, setViewedUserBadges] = useState<string[]>([]);
+  const [myBadges, setMyBadges] = useState<string[]>([]);
 
   const [profile, setProfile] = useState<LocalUser | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -141,6 +143,10 @@ export default function MyProfilePage() {
   // Load the viewed user's data when viewingUser is set
   useEffect(() => {
     if (!viewingUser || !extActor || !localSession) return;
+    // Record a profile visit (fire-and-forget)
+    extActor
+      .recordProfileVisit(localSession.token, viewingUser)
+      .catch(() => {});
     // Use getProfileWithSocial to get profile + follower counts in one call
     extActor
       .getProfileWithSocial(localSession.token, viewingUser)
@@ -153,12 +159,14 @@ export default function MyProfilePage() {
           setViewedUserFollowerCount(Number(result.followerCount));
           setViewedUserFollowingCount(Number(result.followingCount));
           setViewedUserIsFollowing(result.isFollowing);
-          const [b, s] = await Promise.all([
+          const [b, s, badges] = await Promise.all([
             extActor.getUserBio(found.username).catch(() => ""),
             extActor.getUserStatus(found.username).catch(() => ""),
+            extActor.getUserBadges(found.username).catch(() => [] as string[]),
           ]);
           setViewedUserBio(b ?? "");
           setViewedUserStatus(s ?? "");
+          setViewedUserBadges(badges);
         }
       })
       .catch(() => {
@@ -220,6 +228,10 @@ export default function MyProfilePage() {
         if (p) {
           setProfile(p);
           extActor?.getUserBio(p.username).then((b) => setBio(b ?? ""));
+          extActor
+            ?.getUserBadges(p.username)
+            .then((b) => setMyBadges(b))
+            .catch(() => {});
         }
       })
       .catch(() => {});
@@ -510,6 +522,23 @@ export default function MyProfilePage() {
                       {viewedUserBio}
                     </p>
                   )}
+                  {viewedUserBadges.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {viewedUserBadges.map((badge) => (
+                        <span
+                          key={badge}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                        >
+                          {badge === "Active Caller"
+                            ? "📞"
+                            : badge === "Top Poster"
+                              ? "⭐"
+                              : "🏅"}{" "}
+                          {badge}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Follower / Following counts for viewed user */}
                 <div className="flex gap-6 mt-3 mb-1">
@@ -785,6 +814,23 @@ export default function MyProfilePage() {
                           className="px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary border border-primary/20 font-medium"
                         >
                           {lang}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {myBadges.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {myBadges.map((badge) => (
+                        <span
+                          key={badge}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                        >
+                          {badge === "Active Caller"
+                            ? "📞"
+                            : badge === "Top Poster"
+                              ? "⭐"
+                              : "🏅"}{" "}
+                          {badge}
                         </span>
                       ))}
                     </div>

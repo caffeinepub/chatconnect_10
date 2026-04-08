@@ -1,0 +1,28 @@
+{
+  "overview": "Wave Chat is a mobile-first social voice platform inspired by Wakie, with real-time group and private messaging, public and private voice rooms, a shared lobby with themed spaces, user discovery and matching, and robust admin and moderation tools.",
+  "features": [
+    "Real-time direct messaging with pin, delete, emoji reactions, and typing indicators",
+    "Themed voice rooms (Music, Chill, Gaming, Rants) each with isolated On Air and Listener sections",
+    "Wakie-style lobby with On Air speaker strip and listener grid",
+    "User discovery via Matches page filtered by language and online status",
+    "Feed with trending posts, language filters, and post sharing/reposting",
+    "Activity badges auto-awarded (Active Caller, Top Poster)",
+    "Profile visit counter with visitor list",
+    "Custom user status presets (Available, Busy, Away, Do Not Disturb)",
+    "Online/offline green dot indicator on profiles and calling cards",
+    "Admin panel for WILDFIRE with ban, verify, and admin role management",
+    "Dark mode with animated themes (Raining, Cloudy, Mountain, Seawave, Waterfalls, Sunny)",
+    "WebRTC voice and video calls with floating call banner"
+  ],
+  "category": "social",
+  "tags": [
+    "social",
+    "voice-chat",
+    "messaging",
+    "wakie",
+    "real-time",
+    "community",
+    "mobile"
+  ],
+  "last_updated": "2026-04-08T05:19:09.395Z"
+}

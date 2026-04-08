@@ -8,19 +8,7 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const _CaffeineStorageCreateCertificateResult = IDL.Record({
-  'method' : IDL.Text,
-  'blob_hash' : IDL.Text,
-});
-export const _CaffeineStorageRefillInformation = IDL.Record({
-  'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
-});
-export const _CaffeineStorageRefillResult = IDL.Record({
-  'success' : IDL.Opt(IDL.Bool),
-  'topped_up_amount' : IDL.Opt(IDL.Nat),
-});
 export const SessionToken = IDL.Nat;
-export const LoginResult = IDL.Record({ 'token': SessionToken, 'isAdmin': IDL.Bool });
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
@@ -31,6 +19,7 @@ export const AdminUserInfo = IDL.Record({
   'username' : IDL.Text,
   'displayName' : IDL.Text,
   'banExpiresAt' : IDL.Opt(Time),
+  'email' : IDL.Opt(IDL.Text),
   'isVerified' : IDL.Bool,
   'isBanned' : IDL.Bool,
 });
@@ -101,6 +90,11 @@ export const Message = IDL.Record({
   'author' : IDL.Principal,
   'timestamp' : Time,
 });
+export const MessageReaction = IDL.Record({
+  'emoji' : IDL.Text,
+  'timestamp' : Time,
+  'reactorUsername' : IDL.Text,
+});
 export const Signal = IDL.Record({
   'id' : IDL.Nat,
   'data' : IDL.Text,
@@ -151,33 +145,6 @@ export const VoiceParticipant = IDL.Record({
 });
 
 export const idlService = IDL.Service({
-  '_caffeineStorageBlobIsLive' : IDL.Func(
-      [IDL.Vec(IDL.Nat8)],
-      [IDL.Bool],
-      ['query'],
-    ),
-  '_caffeineStorageBlobsToDelete' : IDL.Func(
-      [],
-      [IDL.Vec(IDL.Vec(IDL.Nat8))],
-      ['query'],
-    ),
-  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
-      [IDL.Vec(IDL.Vec(IDL.Nat8))],
-      [],
-      [],
-    ),
-  '_caffeineStorageCreateCertificate' : IDL.Func(
-      [IDL.Text],
-      [_CaffeineStorageCreateCertificateResult],
-      [],
-    ),
-  '_caffeineStorageRefillCashier' : IDL.Func(
-      [IDL.Opt(_CaffeineStorageRefillInformation)],
-      [_CaffeineStorageRefillResult],
-      [],
-    ),
-  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'acceptCallRequest' : IDL.Func([IDL.Nat], [], []),
   'acceptCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
   'addComment' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
@@ -186,7 +153,7 @@ export const idlService = IDL.Service({
       [IDL.Nat],
       [],
     ),
-  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'addMessageReaction' : IDL.Func([SessionToken, IDL.Nat, IDL.Text], [], []),
   'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'banLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'banLocalUserWithDuration' : IDL.Func(
@@ -203,6 +170,7 @@ export const idlService = IDL.Service({
   'deleteCallRequest' : IDL.Func([IDL.Nat], [], []),
   'deleteComment' : IDL.Func([IDL.Nat], [], []),
   'deleteCommentAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'deleteDirectMessage' : IDL.Func([SessionToken, IDL.Nat], [], []),
   'deletePost' : IDL.Func([IDL.Nat], [], []),
   'deletePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
   'deleteUser' : IDL.Func([IDL.Principal], [], []),
@@ -231,7 +199,6 @@ export const idlService = IDL.Service({
     ),
   'getCallTopic' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
-  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
   'getCommentsForPostAsLocal' : IDL.Func(
       [SessionToken, IDL.Nat],
@@ -265,6 +232,11 @@ export const idlService = IDL.Service({
     ),
   'getLocalUsers' : IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
   'getMessage' : IDL.Func([IDL.Nat], [IDL.Opt(Message)], ['query']),
+  'getMessageReactions' : IDL.Func(
+      [SessionToken, IDL.Nat],
+      [IDL.Vec(MessageReaction)],
+      ['query'],
+    ),
   'getMessages' : IDL.Func([], [IDL.Vec(Message)], ['query']),
   'getMessagesAsLocal' : IDL.Func(
       [SessionToken],
@@ -278,6 +250,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getOnlineUsernames' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+  'getPinnedMessage' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [IDL.Opt(DirectMessage)],
+      ['query'],
+    ),
   'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
   'getPostLikesAsLocal' : IDL.Func(
       [SessionToken, IDL.Nat],
@@ -292,13 +269,29 @@ export const idlService = IDL.Service({
       [IDL.Record({ 'visitors' : IDL.Vec(IDL.Text), 'count' : IDL.Nat })],
       ['query'],
     ),
+  'getProfileWithSocial' : IDL.Func(
+      [SessionToken, IDL.Text],
+      [
+        IDL.Record({
+          'isVerified' : IDL.Bool,
+          'isFollowing' : IDL.Bool,
+          'followerCount' : IDL.Nat,
+          'followingCount' : IDL.Nat,
+          'profile' : IDL.Opt(LocalUser),
+        }),
+      ],
+      ['query'],
+    ),
   'getPublicProfileSettings' : IDL.Func(
       [IDL.Text],
       [ProfileSettings],
       ['query'],
     ),
+  'getReshareCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+  'getTypingStatus' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
   'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
+  'getUserBadges' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Text)], ['query']),
   'getUserBio' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -308,6 +301,11 @@ export const idlService = IDL.Service({
   'getUserStatus' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
   'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
+  'getUsersForMatching' : IDL.Func(
+      [SessionToken],
+      [IDL.Vec(LocalUser)],
+      ['query'],
+    ),
   'getVoiceParticipants' : IDL.Func(
       [SessionToken],
       [IDL.Vec(VoiceParticipant)],
@@ -316,7 +314,6 @@ export const idlService = IDL.Service({
   'grantVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
   'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
-  'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
   'isUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isUserVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
@@ -328,11 +325,16 @@ export const idlService = IDL.Service({
   'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
   'likePost' : IDL.Func([IDL.Nat], [], []),
   'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
-  'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [LoginResult], []),
+  'loginLocalAccount' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Record({ 'token' : SessionToken, 'isAdmin' : IDL.Bool })],
+      [],
+    ),
   'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
   'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
   'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
   'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+  'pinDirectMessage' : IDL.Func([SessionToken, IDL.Text, IDL.Nat], [], []),
   'pingOnline' : IDL.Func([SessionToken], [], []),
   'recordProfileVisit' : IDL.Func([SessionToken, IDL.Text], [], []),
   'registerLocalAccount' : IDL.Func(
@@ -340,6 +342,9 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
+  'removeMessageReaction' : IDL.Func([SessionToken, IDL.Nat, IDL.Text], [], []),
+  'resetPasswordAsAdmin' : IDL.Func([SessionToken, IDL.Text, IDL.Text], [], []),
+  'resharePost' : IDL.Func([SessionToken, IDL.Nat], [IDL.Nat], []),
   'revokeVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
@@ -354,7 +359,10 @@ export const idlService = IDL.Service({
   'sendSignal' : IDL.Func([SessionToken, IDL.Text, IDL.Text, IDL.Text], [], []),
   'setCallTopic' : IDL.Func([SessionToken, IDL.Text], [], []),
   'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+  'setTypingStatus' : IDL.Func([SessionToken, IDL.Text, IDL.Bool], [], []),
+  'setUserEmail' : IDL.Func([SessionToken, IDL.Text], [], []),
   'setUserStatus' : IDL.Func([SessionToken, IDL.Text], [], []),
+  'trackCallActivity' : IDL.Func([SessionToken], [], []),
   'unbanLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
   'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),
@@ -385,17 +393,6 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const _CaffeineStorageCreateCertificateResult = IDL.Record({
-    'method' : IDL.Text,
-    'blob_hash' : IDL.Text,
-  });
-  const _CaffeineStorageRefillInformation = IDL.Record({
-    'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
-  });
-  const _CaffeineStorageRefillResult = IDL.Record({
-    'success' : IDL.Opt(IDL.Bool),
-    'topped_up_amount' : IDL.Opt(IDL.Nat),
-  });
   const SessionToken = IDL.Nat;
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
@@ -407,6 +404,7 @@ export const idlFactory = ({ IDL }) => {
     'username' : IDL.Text,
     'displayName' : IDL.Text,
     'banExpiresAt' : IDL.Opt(Time),
+    'email' : IDL.Opt(IDL.Text),
     'isVerified' : IDL.Bool,
     'isBanned' : IDL.Bool,
   });
@@ -477,6 +475,11 @@ export const idlFactory = ({ IDL }) => {
     'author' : IDL.Principal,
     'timestamp' : Time,
   });
+  const MessageReaction = IDL.Record({
+    'emoji' : IDL.Text,
+    'timestamp' : Time,
+    'reactorUsername' : IDL.Text,
+  });
   const Signal = IDL.Record({
     'id' : IDL.Nat,
     'data' : IDL.Text,
@@ -527,33 +530,6 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
-    '_caffeineStorageBlobIsLive' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Bool],
-        ['query'],
-      ),
-    '_caffeineStorageBlobsToDelete' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Vec(IDL.Nat8))],
-        ['query'],
-      ),
-    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
-        [IDL.Vec(IDL.Vec(IDL.Nat8))],
-        [],
-        [],
-      ),
-    '_caffeineStorageCreateCertificate' : IDL.Func(
-        [IDL.Text],
-        [_CaffeineStorageCreateCertificateResult],
-        [],
-      ),
-    '_caffeineStorageRefillCashier' : IDL.Func(
-        [IDL.Opt(_CaffeineStorageRefillInformation)],
-        [_CaffeineStorageRefillResult],
-        [],
-      ),
-    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'acceptCallRequest' : IDL.Func([IDL.Nat], [], []),
     'acceptCallRequestAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
     'addComment' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], []),
@@ -562,7 +538,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Nat],
         [],
       ),
-    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'addMessageReaction' : IDL.Func([SessionToken, IDL.Nat, IDL.Text], [], []),
     'assignRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'banLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'banLocalUserWithDuration' : IDL.Func(
@@ -579,6 +555,7 @@ export const idlFactory = ({ IDL }) => {
     'deleteCallRequest' : IDL.Func([IDL.Nat], [], []),
     'deleteComment' : IDL.Func([IDL.Nat], [], []),
     'deleteCommentAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'deleteDirectMessage' : IDL.Func([SessionToken, IDL.Nat], [], []),
     'deletePost' : IDL.Func([IDL.Nat], [], []),
     'deletePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
     'deleteUser' : IDL.Func([IDL.Principal], [], []),
@@ -615,7 +592,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getCallTopic' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
-    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCommentsForPost' : IDL.Func([IDL.Nat], [IDL.Vec(Comment)], ['query']),
     'getCommentsForPostAsLocal' : IDL.Func(
         [SessionToken, IDL.Nat],
@@ -649,6 +625,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getLocalUsers' : IDL.Func([], [IDL.Vec(LocalUser)], ['query']),
     'getMessage' : IDL.Func([IDL.Nat], [IDL.Opt(Message)], ['query']),
+    'getMessageReactions' : IDL.Func(
+        [SessionToken, IDL.Nat],
+        [IDL.Vec(MessageReaction)],
+        ['query'],
+      ),
     'getMessages' : IDL.Func([], [IDL.Vec(Message)], ['query']),
     'getMessagesAsLocal' : IDL.Func(
         [SessionToken],
@@ -662,6 +643,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getOnlineUsernames' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'getPinnedMessage' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Opt(DirectMessage)],
+        ['query'],
+      ),
     'getPostLikes' : IDL.Func([IDL.Nat], [IDL.Vec(IDL.Text)], ['query']),
     'getPostLikesAsLocal' : IDL.Func(
         [SessionToken, IDL.Nat],
@@ -680,13 +666,33 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Record({ 'visitors' : IDL.Vec(IDL.Text), 'count' : IDL.Nat })],
         ['query'],
       ),
+    'getProfileWithSocial' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [
+          IDL.Record({
+            'isVerified' : IDL.Bool,
+            'isFollowing' : IDL.Bool,
+            'followerCount' : IDL.Nat,
+            'followingCount' : IDL.Nat,
+            'profile' : IDL.Opt(LocalUser),
+          }),
+        ],
+        ['query'],
+      ),
     'getPublicProfileSettings' : IDL.Func(
         [IDL.Text],
         [ProfileSettings],
         ['query'],
       ),
+    'getReshareCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+    'getTypingStatus' : IDL.Func(
+        [SessionToken, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'getUnreadDMCount' : IDL.Func([SessionToken], [IDL.Nat], ['query']),
     'getUser' : IDL.Func([IDL.Principal], [IDL.Opt(User)], ['query']),
+    'getUserBadges' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Text)], ['query']),
     'getUserBio' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -696,6 +702,11 @@ export const idlFactory = ({ IDL }) => {
     'getUserStatus' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
     'getUsersCount' : IDL.Func([], [IDL.Nat], ['query']),
+    'getUsersForMatching' : IDL.Func(
+        [SessionToken],
+        [IDL.Vec(LocalUser)],
+        ['query'],
+      ),
     'getVoiceParticipants' : IDL.Func(
         [SessionToken],
         [IDL.Vec(VoiceParticipant)],
@@ -704,7 +715,6 @@ export const idlFactory = ({ IDL }) => {
     'grantVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
     'isBlocked' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
     'isBlockedBy' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
-    'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isFollowing' : IDL.Func([SessionToken, IDL.Text], [IDL.Bool], ['query']),
     'isUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isUserVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
@@ -716,11 +726,16 @@ export const idlFactory = ({ IDL }) => {
     'leaveVoiceChannel' : IDL.Func([SessionToken], [], []),
     'likePost' : IDL.Func([IDL.Nat], [], []),
     'likePostAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
-    'loginLocalAccount' : IDL.Func([IDL.Text, IDL.Text], [LoginResult], []),
+    'loginLocalAccount' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Record({ 'token' : SessionToken, 'isAdmin' : IDL.Bool })],
+        [],
+      ),
     'logoutLocalAccount' : IDL.Func([SessionToken], [], []),
     'markAllNotificationsReadAsLocal' : IDL.Func([SessionToken], [], []),
     'markDirectMessagesRead' : IDL.Func([SessionToken, IDL.Text], [], []),
     'markNotificationReadAsLocal' : IDL.Func([SessionToken, IDL.Nat], [], []),
+    'pinDirectMessage' : IDL.Func([SessionToken, IDL.Text, IDL.Nat], [], []),
     'pingOnline' : IDL.Func([SessionToken], [], []),
     'recordProfileVisit' : IDL.Func([SessionToken, IDL.Text], [], []),
     'registerLocalAccount' : IDL.Func(
@@ -728,6 +743,17 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'removeMessageReaction' : IDL.Func(
+        [SessionToken, IDL.Nat, IDL.Text],
+        [],
+        [],
+      ),
+    'resetPasswordAsAdmin' : IDL.Func(
+        [SessionToken, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
+    'resharePost' : IDL.Func([SessionToken, IDL.Nat], [IDL.Nat], []),
     'revokeVerifiedBadge' : IDL.Func([SessionToken, IDL.Text], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'sendCallRequest' : IDL.Func([IDL.Principal], [IDL.Nat], []),
@@ -750,7 +776,10 @@ export const idlFactory = ({ IDL }) => {
       ),
     'setCallTopic' : IDL.Func([SessionToken, IDL.Text], [], []),
     'setMicActive' : IDL.Func([SessionToken, IDL.Bool], [], []),
+    'setTypingStatus' : IDL.Func([SessionToken, IDL.Text, IDL.Bool], [], []),
+    'setUserEmail' : IDL.Func([SessionToken, IDL.Text], [], []),
     'setUserStatus' : IDL.Func([SessionToken, IDL.Text], [], []),
+    'trackCallActivity' : IDL.Func([SessionToken], [], []),
     'unbanLocalUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'unblockUser' : IDL.Func([SessionToken, IDL.Text], [], []),
     'unfollowUser' : IDL.Func([SessionToken, IDL.Text], [], []),

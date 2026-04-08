@@ -19,6 +19,7 @@ import {
   LogOut,
   MessageCircle,
   Radio,
+  Repeat2,
   Send,
   Trash2,
 } from "lucide-react";
@@ -65,6 +66,8 @@ type ActorExt = {
   deleteCommentAsLocal(token: SessionToken, id: bigint): Promise<void>;
   deleteComment(id: bigint): Promise<void>;
   getVoiceParticipants(token: SessionToken): Promise<VoiceParticipant[]>;
+  resharePost(token: SessionToken, originalPostId: bigint): Promise<bigint>;
+  getReshareCount(postId: bigint): Promise<bigint>;
 };
 
 const AVATAR_GRADIENTS = [
@@ -137,6 +140,8 @@ interface PostState {
   replyText: string;
   replySubmitting: boolean;
   deleteLoading: boolean;
+  reshareLoading: boolean;
+  reshareCount: number;
 }
 
 function defaultPostState(): PostState {
@@ -152,6 +157,8 @@ function defaultPostState(): PostState {
     replyText: "",
     replySubmitting: false,
     deleteLoading: false,
+    reshareLoading: false,
+    reshareCount: 0,
   };
 }
 
@@ -334,6 +341,22 @@ export default function FeedPage() {
     [actor, getActor, isLocalLoggedIn, localSession, updatePostState],
   );
 
+  // Load reshare count for a post
+  const loadReshareCount = useCallback(
+    async (postId: bigint) => {
+      const key = postId.toString();
+      if (!actor) return;
+      const a = getActor();
+      try {
+        const count = await a.getReshareCount(postId);
+        updatePostState(key, { reshareCount: Number(count) });
+      } catch {
+        // ignore
+      }
+    },
+    [actor, getActor, updatePostState],
+  );
+
   // Load likes on mount for all posts
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional shallow dep
   useEffect(() => {
@@ -342,9 +365,10 @@ export default function FeedPage() {
       const key = post.id.toString();
       if (!postStates[key]?.likesLoaded) {
         loadLikes(post.id);
+        loadReshareCount(post.id);
       }
     }
-  }, [actor, sortedPosts.length, loadLikes]);
+  }, [actor, sortedPosts.length, loadLikes, loadReshareCount]);
 
   const handleToggleLike = async (postId: bigint) => {
     const key = postId.toString();
@@ -472,6 +496,28 @@ export default function FeedPage() {
     } catch {
       toast.error("Failed to delete post.");
       updatePostState(key, { deleteLoading: false });
+    }
+  };
+
+  const handleReshare = async (postId: bigint) => {
+    const key = postId.toString();
+    if (!isLocalLoggedIn || !localSession || !actor) {
+      toast.error("Log in to repost");
+      return;
+    }
+    const a = getActor();
+    updatePostState(key, { reshareLoading: true });
+    try {
+      await a.resharePost(localSession.token, postId);
+      toast.success("Post reposted!");
+      await loadReshareCount(postId);
+      // Refresh feed
+      const updated = await a.getPostsAsLocal(localSession.token);
+      setLocalPosts(updated);
+    } catch {
+      toast.error("Failed to repost.");
+    } finally {
+      updatePostState(key, { reshareLoading: false });
     }
   };
 
@@ -894,6 +940,20 @@ export default function FeedPage() {
                               )}
                             </div>
                             <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
+                              {(
+                                post as Post & { resharedFromUsername?: string }
+                              ).resharedFromUsername && (
+                                <span className="block text-xs text-muted-foreground mb-1">
+                                  🔁 Reposted from @
+                                  {
+                                    (
+                                      post as Post & {
+                                        resharedFromUsername?: string;
+                                      }
+                                    ).resharedFromUsername
+                                  }
+                                </span>
+                              )}
                               {post.text}
                             </p>
                           </div>
@@ -958,6 +1018,24 @@ export default function FeedPage() {
                               <ChevronUp className="h-3.5 w-3.5" />
                             ) : (
                               <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+
+                          {/* Repost button */}
+                          <button
+                            type="button"
+                            onClick={() => handleReshare(post.id)}
+                            disabled={ps.reshareLoading}
+                            className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground hover:text-green-500 transition-colors"
+                            data-ocid={`feed.reshare_button.${i + 1}`}
+                          >
+                            {ps.reshareLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Repeat2 className="h-4 w-4" />
+                            )}
+                            {ps.reshareCount > 0 && (
+                              <span>{ps.reshareCount}</span>
                             )}
                           </button>
                         </div>

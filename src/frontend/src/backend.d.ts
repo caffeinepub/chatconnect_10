@@ -22,14 +22,6 @@ export interface Signal {
     fromUsername: string;
     signalType: string;
 }
-export interface DirectMessage {
-    id: bigint;
-    text: string;
-    senderUsername: string;
-    isRead: boolean;
-    timestamp: Time;
-    recipientUsername: string;
-}
 export interface VoiceParticipant {
     username: string;
     displayName: string;
@@ -58,6 +50,11 @@ export interface LocalCallRequest {
     callerUsername: string;
     timestamp: Time;
     calleeUsername: string;
+}
+export interface MessageReaction {
+    emoji: string;
+    timestamp: Time;
+    reactorUsername: string;
 }
 export interface LocalUser {
     age: bigint;
@@ -104,9 +101,9 @@ export interface AdminUserInfo {
     username: string;
     displayName: string;
     banExpiresAt?: Time;
+    email?: string;
     isVerified: boolean;
     isBanned: boolean;
-    email?: string;
 }
 export interface ProfileSettings {
     hideFollowers: boolean;
@@ -127,6 +124,14 @@ export interface UserProfile {
     photo?: ExternalBlob;
     telephone: string;
 }
+export interface DirectMessage {
+    id: bigint;
+    text: string;
+    senderUsername: string;
+    isRead: boolean;
+    timestamp: Time;
+    recipientUsername: string;
+}
 export enum CallStatus {
     pending = "pending",
     denied = "denied",
@@ -143,19 +148,12 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
-export interface ProfileWithSocial {
-    profile?: LocalUser;
-    followerCount: bigint;
-    followingCount: bigint;
-    isFollowing: boolean;
-    isVerified: boolean;
-}
 export interface backendInterface {
     acceptCallRequest(id: bigint): Promise<void>;
     acceptCallRequestAsLocal(token: SessionToken, id: bigint): Promise<void>;
     addComment(postId: bigint, text: string): Promise<bigint>;
     addCommentAsLocal(token: SessionToken, postId: bigint, text: string): Promise<bigint>;
-    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    addMessageReaction(token: SessionToken, msgId: bigint, emoji: string): Promise<void>;
     assignRole(user: Principal, role: UserRole): Promise<void>;
     banLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     banLocalUserWithDuration(token: SessionToken, targetUsername: string, durationNs: bigint): Promise<void>;
@@ -185,7 +183,6 @@ export interface backendInterface {
     getCallRequestsAsLocal(token: SessionToken): Promise<Array<LocalCallRequest>>;
     getCallTopic(username: string): Promise<string | null>;
     getCallerUserProfile(): Promise<UserProfile | null>;
-    getCallerUserRole(): Promise<UserRole>;
     getCommentsForPost(postId: bigint): Promise<Array<Comment>>;
     getCommentsForPostAsLocal(token: SessionToken, postId: bigint): Promise<Array<Comment>>;
     getConversations(token: SessionToken): Promise<Array<ConversationSummary>>;
@@ -195,6 +192,7 @@ export interface backendInterface {
     getLocalUserProfile(token: SessionToken): Promise<LocalUser | null>;
     getLocalUsers(): Promise<Array<LocalUser>>;
     getMessage(id: bigint): Promise<Message | null>;
+    getMessageReactions(token: SessionToken, msgId: bigint): Promise<Array<MessageReaction>>;
     getMessages(): Promise<Array<Message>>;
     getMessagesAsLocal(token: SessionToken): Promise<Array<Message>>;
     getMySignals(token: SessionToken): Promise<Array<Signal>>;
@@ -211,16 +209,18 @@ export interface backendInterface {
         count: bigint;
     }>;
     getProfileWithSocial(token: SessionToken, targetUsername: string): Promise<{
-        profile: LocalUser | undefined;
+        isVerified: boolean;
+        isFollowing: boolean;
         followerCount: bigint;
         followingCount: bigint;
-        isFollowing: boolean;
-        isVerified: boolean;
+        profile?: LocalUser;
     }>;
     getPublicProfileSettings(username: string): Promise<ProfileSettings>;
+    getReshareCount(postId: bigint): Promise<bigint>;
     getTypingStatus(token: SessionToken, otherUsername: string): Promise<boolean>;
     getUnreadDMCount(token: SessionToken): Promise<bigint>;
     getUser(principal: Principal): Promise<User | null>;
+    getUserBadges(username: string): Promise<Array<string>>;
     getUserBio(username: string): Promise<string | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUserStatus(username: string): Promise<string | null>;
@@ -231,7 +231,6 @@ export interface backendInterface {
     grantVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
     isBlocked(token: SessionToken, targetUsername: string): Promise<boolean>;
     isBlockedBy(token: SessionToken, targetUsername: string): Promise<boolean>;
-    isCallerAdmin(): Promise<boolean>;
     isFollowing(token: SessionToken, targetUsername: string): Promise<boolean>;
     isUserBanned(username: string): Promise<boolean>;
     isUserVerified(username: string): Promise<boolean>;
@@ -239,16 +238,21 @@ export interface backendInterface {
     leaveVoiceChannel(token: SessionToken): Promise<void>;
     likePost(postId: bigint): Promise<void>;
     likePostAsLocal(token: SessionToken, postId: bigint): Promise<void>;
-    loginLocalAccount(username: string, passwordHash: string): Promise<{ token: SessionToken; isAdmin: boolean }>;
+    loginLocalAccount(username: string, passwordHash: string): Promise<{
+        token: SessionToken;
+        isAdmin: boolean;
+    }>;
     logoutLocalAccount(token: SessionToken): Promise<void>;
     markAllNotificationsReadAsLocal(token: SessionToken): Promise<void>;
     markDirectMessagesRead(token: SessionToken, otherUsername: string): Promise<void>;
     markNotificationReadAsLocal(token: SessionToken, id: bigint): Promise<void>;
-    pingOnline(token: SessionToken): Promise<void>;
     pinDirectMessage(token: SessionToken, otherUsername: string, msgId: bigint): Promise<void>;
+    pingOnline(token: SessionToken): Promise<void>;
     recordProfileVisit(token: SessionToken, visitedUsername: string): Promise<void>;
     registerLocalAccount(username: string, passwordHash: string, displayName: string, age: bigint, photo: ExternalBlob | null): Promise<void>;
+    removeMessageReaction(token: SessionToken, msgId: bigint, emoji: string): Promise<void>;
     resetPasswordAsAdmin(token: SessionToken, targetUsername: string, newPasswordHash: string): Promise<void>;
+    resharePost(token: SessionToken, originalPostId: bigint): Promise<bigint>;
     revokeVerifiedBadge(token: SessionToken, targetUsername: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     sendCallRequest(callee: Principal): Promise<bigint>;
@@ -262,6 +266,7 @@ export interface backendInterface {
     setTypingStatus(token: SessionToken, otherUsername: string, isTyping: boolean): Promise<void>;
     setUserEmail(token: SessionToken, email: string): Promise<void>;
     setUserStatus(token: SessionToken, status: string): Promise<void>;
+    trackCallActivity(token: SessionToken): Promise<void>;
     unbanLocalUser(token: SessionToken, targetUsername: string): Promise<void>;
     unblockUser(token: SessionToken, targetUsername: string): Promise<void>;
     unfollowUser(token: SessionToken, targetUsername: string): Promise<void>;

@@ -1,0 +1,306 @@
+type VoiceParticipant = 
+ record {
+   displayName: text;
+   isMicActive: bool;
+   username: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = 
+ record {
+   fname: text;
+   name: text;
+   photo: opt ExternalBlob;
+   telephone: text;
+ };
+type User = 
+ record {
+   fname: text;
+   name: text;
+   photo: opt ExternalBlob;
+   "principal": principal;
+   role: UserRole;
+   telephone: text;
+ };
+type Time = int;
+type Signal = 
+ record {
+   data: text;
+   fromUsername: text;
+   id: nat;
+   signalType: text;
+   timestamp: Time;
+   toUsername: text;
+ };
+type SessionToken = nat;
+type ProfileSettings = 
+ record {
+   hideFollowers: bool;
+   hideFollowing: bool;
+ };
+type Post = 
+ record {
+   author: principal;
+   authorName: text;
+   id: nat;
+   "text": text;
+   timestamp: Time;
+ };
+type NotificationType = 
+ variant {
+   callRequest;
+   comment;
+   like;
+ };
+type Notification = 
+ record {
+   actorName: text;
+   callRequestId: opt nat;
+   id: nat;
+   isRead: bool;
+   notifType: NotificationType;
+   postId: opt nat;
+   postText: opt text;
+   recipientUsername: text;
+   timestamp: Time;
+ };
+type MessageReaction = 
+ record {
+   emoji: text;
+   reactorUsername: text;
+   timestamp: Time;
+ };
+type Message = 
+ record {
+   author: principal;
+   authorName: text;
+   id: nat;
+   "text": text;
+   timestamp: Time;
+ };
+type LocalUser = 
+ record {
+   age: nat;
+   displayName: text;
+   lastNameChange: opt Time;
+   passwordHash: text;
+   photo: opt ExternalBlob;
+   username: text;
+ };
+type LocalCallRequest = 
+ record {
+   calleeUsername: text;
+   callerUsername: text;
+   id: nat;
+   status: CallStatus;
+   timestamp: Time;
+ };
+type ExternalBlob = blob;
+type DirectMessage = 
+ record {
+   id: nat;
+   isRead: bool;
+   recipientUsername: text;
+   senderUsername: text;
+   "text": text;
+   timestamp: Time;
+ };
+type ConversationSummary = 
+ record {
+   lastMessage: text;
+   lastMessageIsRead: bool;
+   lastMessageSender: text;
+   lastTimestamp: Time;
+   otherDisplayName: text;
+   otherUsername: text;
+   unreadCount: nat;
+ };
+type Comment = 
+ record {
+   author: principal;
+   authorName: text;
+   id: nat;
+   postId: nat;
+   "text": text;
+   timestamp: Time;
+ };
+type CallStatus = 
+ variant {
+   accepted;
+   denied;
+   ended;
+   pending;
+ };
+type CallRequestWithStatus = 
+ record {
+   callee: principal;
+   caller: principal;
+   id: nat;
+   status: CallStatus;
+   timestamp: Time;
+ };
+type AdminUserInfo = 
+ record {
+   banExpiresAt: opt Time;
+   displayName: text;
+   email: opt text;
+   isBanned: bool;
+   isVerified: bool;
+   username: text;
+ };
+service : {
+  acceptCallRequest: (id: nat) -> ();
+  acceptCallRequestAsLocal: (token: SessionToken, id: nat) -> ();
+  addComment: (postId: nat, "text": text) -> (nat);
+  addCommentAsLocal: (token: SessionToken, postId: nat, "text": text) ->
+   (nat);
+  addMessageReaction: (token: SessionToken, msgId: nat, emoji: text) -> ();
+  assignRole: (user: principal, role: UserRole) -> ();
+  banLocalUser: (token: SessionToken, targetUsername: text) -> ();
+  banLocalUserWithDuration: (token: SessionToken, targetUsername: text,
+   durationNs: nat) -> ();
+  blockUser: (token: SessionToken, targetUsername: text) -> ();
+  checkIsWildfireAdmin: (token: SessionToken) -> (bool) query;
+  clearCallTopic: (token: SessionToken) -> ();
+  createPost: ("text": text) -> (nat);
+  createPostAsLocal: (token: SessionToken, "text": text) -> (nat);
+  createUser: (name: text, fname: text, telephone: text) -> ();
+  deleteCallRequest: (id: nat) -> ();
+  deleteComment: (id: nat) -> ();
+  deleteCommentAsLocal: (token: SessionToken, id: nat) -> ();
+  deleteDirectMessage: (token: SessionToken, msgId: nat) -> ();
+  deletePost: (id: nat) -> ();
+  deletePostAsLocal: (token: SessionToken, id: nat) -> ();
+  deleteUser: (targetUser: principal) -> ();
+  denyCallRequest: (id: nat) -> ();
+  denyCallRequestAsLocal: (token: SessionToken, id: nat) -> ();
+  endCall: (id: nat) -> ();
+  endCallAsLocal: (token: SessionToken, id: nat) -> ();
+  followUser: (token: SessionToken, targetUsername: text) -> ();
+  getAllUsersForAdmin: (token: SessionToken) -> (vec AdminUserInfo) query;
+  getBanExpiry: (username: text) -> (opt Time) query;
+  getBlockedUsers: (token: SessionToken) -> (vec text) query;
+  getCallRequest: (id: nat) -> (opt CallRequestWithStatus) query;
+  getCallRequests: () -> (vec CallRequestWithStatus) query;
+  getCallRequestsAsLocal: (token: SessionToken) ->
+   (vec LocalCallRequest) query;
+  getCallTopic: (username: text) -> (opt text) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCommentsForPost: (postId: nat) -> (vec Comment) query;
+  getCommentsForPostAsLocal: (token: SessionToken, postId: nat) ->
+   (vec Comment) query;
+  getConversations: (token: SessionToken) -> (vec ConversationSummary) query;
+  getDirectMessages: (token: SessionToken, otherUsername: text) ->
+   (vec DirectMessage) query;
+  getFollowers: (token: SessionToken, username: text) -> (vec text) query;
+  getFollowing: (token: SessionToken, username: text) -> (vec text) query;
+  getLocalUserProfile: (token: SessionToken) -> (opt LocalUser) query;
+  getLocalUsers: () -> (vec LocalUser) query;
+  getMessage: (id: nat) -> (opt Message) query;
+  getMessageReactions: (token: SessionToken, msgId: nat) ->
+   (vec MessageReaction) query;
+  getMessages: () -> (vec Message) query;
+  getMessagesAsLocal: (token: SessionToken) -> (vec Message) query;
+  getMySignals: (token: SessionToken) -> (vec Signal);
+  getNotificationsAsLocal: (token: SessionToken) -> (vec Notification) query;
+  getOnlineUsernames: () -> (vec text) query;
+  getPinnedMessage: (token: SessionToken, otherUsername: text) ->
+   (opt DirectMessage) query;
+  getPostLikes: (postId: nat) -> (vec text) query;
+  getPostLikesAsLocal: (token: SessionToken, postId: nat) -> (vec text) query;
+  getPosts: () -> (vec Post) query;
+  getPostsAsLocal: (token: SessionToken) -> (vec Post) query;
+  getProfileSettings: (token: SessionToken) -> (ProfileSettings) query;
+  getProfileVisitors: (token: SessionToken, username: text) ->
+   (record {
+      count: nat;
+      visitors: vec text;
+    }) query;
+  getProfileWithSocial: (token: SessionToken, targetUsername: text) ->
+   (record {
+      followerCount: nat;
+      followingCount: nat;
+      isFollowing: bool;
+      isVerified: bool;
+      profile: opt LocalUser;
+    }) query;
+  getPublicProfileSettings: (username: text) -> (ProfileSettings) query;
+  getReshareCount: (postId: nat) -> (nat) query;
+  getTypingStatus: (token: SessionToken, otherUsername: text) -> (bool) query;
+  getUnreadDMCount: (token: SessionToken) -> (nat) query;
+  getUser: ("principal": principal) -> (opt User) query;
+  getUserBadges: (username: text) -> (vec text) query;
+  getUserBio: (username: text) -> (opt text) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  getUserStatus: (username: text) -> (opt text) query;
+  getUsers: () -> (vec User) query;
+  getUsersCount: () -> (nat) query;
+  getUsersForMatching: (token: SessionToken) -> (vec LocalUser) query;
+  getVoiceParticipants: (token: SessionToken) -> (vec VoiceParticipant) query;
+  grantVerifiedBadge: (token: SessionToken, targetUsername: text) -> ();
+  isBlocked: (token: SessionToken, targetUsername: text) -> (bool) query;
+  isBlockedBy: (token: SessionToken, targetUsername: text) -> (bool) query;
+  isFollowing: (token: SessionToken, targetUsername: text) -> (bool) query;
+  isUserBanned: (username: text) -> (bool) query;
+  isUserVerified: (username: text) -> (bool) query;
+  joinVoiceChannel: (token: SessionToken) -> (vec VoiceParticipant);
+  leaveVoiceChannel: (token: SessionToken) -> ();
+  likePost: (postId: nat) -> ();
+  likePostAsLocal: (token: SessionToken, postId: nat) -> ();
+  loginLocalAccount: (username: text, passwordHash: text) ->
+   (record {
+      isAdmin: bool;
+      token: SessionToken;
+    });
+  logoutLocalAccount: (token: SessionToken) -> ();
+  markAllNotificationsReadAsLocal: (token: SessionToken) -> ();
+  markDirectMessagesRead: (token: SessionToken, otherUsername: text) -> ();
+  markNotificationReadAsLocal: (token: SessionToken, id: nat) -> ();
+  pinDirectMessage: (token: SessionToken, otherUsername: text, msgId: 
+   nat) -> ();
+  pingOnline: (token: SessionToken) -> ();
+  recordProfileVisit: (token: SessionToken, visitedUsername: text) -> ();
+  registerLocalAccount: (username: text, passwordHash: text, displayName:
+   text, age: nat, photo: opt ExternalBlob) -> ();
+  removeMessageReaction: (token: SessionToken, msgId: nat, emoji: text) -> ();
+  resetPasswordAsAdmin: (token: SessionToken, targetUsername: text,
+   newPasswordHash: text) -> ();
+  resharePost: (token: SessionToken, originalPostId: nat) -> (nat);
+  revokeVerifiedBadge: (token: SessionToken, targetUsername: text) -> ();
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  sendCallRequest: (callee: principal) -> (nat);
+  sendCallRequestAsLocal: (token: SessionToken, calleeUsername: text) ->
+   (nat);
+  sendDirectMessage: (token: SessionToken, recipientUsername: text, "text":
+   text) -> (nat);
+  sendMessage: ("text": text) -> (nat);
+  sendMessageAsLocal: (token: SessionToken, "text": text) -> (nat);
+  sendSignal: (token: SessionToken, toUsername: text, signalType: text, data:
+   text) -> ();
+  setCallTopic: (token: SessionToken, topic: text) -> ();
+  setMicActive: (token: SessionToken, active: bool) -> ();
+  setTypingStatus: (token: SessionToken, otherUsername: text, isTyping:
+   bool) -> ();
+  setUserEmail: (token: SessionToken, email: text) -> ();
+  setUserStatus: (token: SessionToken, status: text) -> ();
+  trackCallActivity: (token: SessionToken) -> ();
+  unbanLocalUser: (token: SessionToken, targetUsername: text) -> ();
+  unblockUser: (token: SessionToken, targetUsername: text) -> ();
+  unfollowUser: (token: SessionToken, targetUsername: text) -> ();
+  unlikePost: (postId: nat) -> ();
+  unlikePostAsLocal: (token: SessionToken, postId: nat) -> ();
+  updateLocalUserBio: (token: SessionToken, bio: text) -> ();
+  updateLocalUserDisplayName: (token: SessionToken, newDisplayName: text) ->
+   (text);
+  updateLocalUserPhoto: (token: SessionToken, photo: ExternalBlob) -> ();
+  updateProfileSettings: (token: SessionToken, hideFollowers: bool,
+   hideFollowing: bool) -> ();
+  updateUser: (photo: ExternalBlob) -> ();
+  updateUserWithoutPhoto: (name: text, fname: text, telephone: text) -> ();
+  validateSessionToken: (token: SessionToken) -> (opt text) query;
+  verifyUser: () -> ();
+}

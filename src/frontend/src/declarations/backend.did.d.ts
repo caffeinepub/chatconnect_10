@@ -10,15 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface LoginResult {
-  'token' : SessionToken,
-  'isAdmin' : boolean,
-}
-
 export interface AdminUserInfo {
   'username' : string,
   'displayName' : string,
   'banExpiresAt' : [] | [Time],
+  'email' : [] | [string],
   'isVerified' : boolean,
   'isBanned' : boolean,
 }
@@ -81,6 +77,11 @@ export interface Message {
   'author' : Principal,
   'timestamp' : Time,
 }
+export interface MessageReaction {
+  'emoji' : string,
+  'timestamp' : Time,
+  'reactorUsername' : string,
+}
 export interface Notification {
   'id' : bigint,
   'postText' : [] | [string],
@@ -138,39 +139,12 @@ export interface VoiceParticipant {
   'displayName' : string,
   'isMicActive' : boolean,
 }
-export interface _CaffeineStorageCreateCertificateResult {
-  'method' : string,
-  'blob_hash' : string,
-}
-export interface _CaffeineStorageRefillInformation {
-  'proposed_top_up_amount' : [] | [bigint],
-}
-export interface _CaffeineStorageRefillResult {
-  'success' : [] | [boolean],
-  'topped_up_amount' : [] | [bigint],
-}
 export interface _SERVICE {
-  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
-  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
-  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
-    [Array<Uint8Array>],
-    undefined
-  >,
-  '_caffeineStorageCreateCertificate' : ActorMethod<
-    [string],
-    _CaffeineStorageCreateCertificateResult
-  >,
-  '_caffeineStorageRefillCashier' : ActorMethod<
-    [[] | [_CaffeineStorageRefillInformation]],
-    _CaffeineStorageRefillResult
-  >,
-  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
-  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'acceptCallRequest' : ActorMethod<[bigint], undefined>,
   'acceptCallRequestAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
   'addComment' : ActorMethod<[bigint, string], bigint>,
   'addCommentAsLocal' : ActorMethod<[SessionToken, bigint, string], bigint>,
-  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'addMessageReaction' : ActorMethod<[SessionToken, bigint, string], undefined>,
   'assignRole' : ActorMethod<[Principal, UserRole], undefined>,
   'banLocalUser' : ActorMethod<[SessionToken, string], undefined>,
   'banLocalUserWithDuration' : ActorMethod<
@@ -186,6 +160,7 @@ export interface _SERVICE {
   'deleteCallRequest' : ActorMethod<[bigint], undefined>,
   'deleteComment' : ActorMethod<[bigint], undefined>,
   'deleteCommentAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
+  'deleteDirectMessage' : ActorMethod<[SessionToken, bigint], undefined>,
   'deletePost' : ActorMethod<[bigint], undefined>,
   'deletePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
   'deleteUser' : ActorMethod<[Principal], undefined>,
@@ -205,7 +180,6 @@ export interface _SERVICE {
   >,
   'getCallTopic' : ActorMethod<[string], [] | [string]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
-  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCommentsForPost' : ActorMethod<[bigint], Array<Comment>>,
   'getCommentsForPostAsLocal' : ActorMethod<
     [SessionToken, bigint],
@@ -221,11 +195,19 @@ export interface _SERVICE {
   'getLocalUserProfile' : ActorMethod<[SessionToken], [] | [LocalUser]>,
   'getLocalUsers' : ActorMethod<[], Array<LocalUser>>,
   'getMessage' : ActorMethod<[bigint], [] | [Message]>,
+  'getMessageReactions' : ActorMethod<
+    [SessionToken, bigint],
+    Array<MessageReaction>
+  >,
   'getMessages' : ActorMethod<[], Array<Message>>,
   'getMessagesAsLocal' : ActorMethod<[SessionToken], Array<Message>>,
   'getMySignals' : ActorMethod<[SessionToken], Array<Signal>>,
   'getNotificationsAsLocal' : ActorMethod<[SessionToken], Array<Notification>>,
   'getOnlineUsernames' : ActorMethod<[], Array<string>>,
+  'getPinnedMessage' : ActorMethod<
+    [SessionToken, string],
+    [] | [DirectMessage]
+  >,
   'getPostLikes' : ActorMethod<[bigint], Array<string>>,
   'getPostLikesAsLocal' : ActorMethod<[SessionToken, bigint], Array<string>>,
   'getPosts' : ActorMethod<[], Array<Post>>,
@@ -235,19 +217,32 @@ export interface _SERVICE {
     [SessionToken, string],
     { 'visitors' : Array<string>, 'count' : bigint }
   >,
+  'getProfileWithSocial' : ActorMethod<
+    [SessionToken, string],
+    {
+      'isVerified' : boolean,
+      'isFollowing' : boolean,
+      'followerCount' : bigint,
+      'followingCount' : bigint,
+      'profile' : [] | [LocalUser],
+    }
+  >,
   'getPublicProfileSettings' : ActorMethod<[string], ProfileSettings>,
+  'getReshareCount' : ActorMethod<[bigint], bigint>,
+  'getTypingStatus' : ActorMethod<[SessionToken, string], boolean>,
   'getUnreadDMCount' : ActorMethod<[SessionToken], bigint>,
   'getUser' : ActorMethod<[Principal], [] | [User]>,
+  'getUserBadges' : ActorMethod<[string], Array<string>>,
   'getUserBio' : ActorMethod<[string], [] | [string]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUserStatus' : ActorMethod<[string], [] | [string]>,
   'getUsers' : ActorMethod<[], Array<User>>,
   'getUsersCount' : ActorMethod<[], bigint>,
+  'getUsersForMatching' : ActorMethod<[SessionToken], Array<LocalUser>>,
   'getVoiceParticipants' : ActorMethod<[SessionToken], Array<VoiceParticipant>>,
   'grantVerifiedBadge' : ActorMethod<[SessionToken, string], undefined>,
   'isBlocked' : ActorMethod<[SessionToken, string], boolean>,
   'isBlockedBy' : ActorMethod<[SessionToken, string], boolean>,
-  'isCallerAdmin' : ActorMethod<[], boolean>,
   'isFollowing' : ActorMethod<[SessionToken, string], boolean>,
   'isUserBanned' : ActorMethod<[string], boolean>,
   'isUserVerified' : ActorMethod<[string], boolean>,
@@ -255,7 +250,10 @@ export interface _SERVICE {
   'leaveVoiceChannel' : ActorMethod<[SessionToken], undefined>,
   'likePost' : ActorMethod<[bigint], undefined>,
   'likePostAsLocal' : ActorMethod<[SessionToken, bigint], undefined>,
-  'loginLocalAccount' : ActorMethod<[string, string], { token: SessionToken; isAdmin: boolean }>,
+  'loginLocalAccount' : ActorMethod<
+    [string, string],
+    { 'token' : SessionToken, 'isAdmin' : boolean }
+  >,
   'logoutLocalAccount' : ActorMethod<[SessionToken], undefined>,
   'markAllNotificationsReadAsLocal' : ActorMethod<[SessionToken], undefined>,
   'markDirectMessagesRead' : ActorMethod<[SessionToken, string], undefined>,
@@ -263,12 +261,22 @@ export interface _SERVICE {
     [SessionToken, bigint],
     undefined
   >,
+  'pinDirectMessage' : ActorMethod<[SessionToken, string, bigint], undefined>,
   'pingOnline' : ActorMethod<[SessionToken], undefined>,
   'recordProfileVisit' : ActorMethod<[SessionToken, string], undefined>,
   'registerLocalAccount' : ActorMethod<
     [string, string, string, bigint, [] | [ExternalBlob]],
     undefined
   >,
+  'removeMessageReaction' : ActorMethod<
+    [SessionToken, bigint, string],
+    undefined
+  >,
+  'resetPasswordAsAdmin' : ActorMethod<
+    [SessionToken, string, string],
+    undefined
+  >,
+  'resharePost' : ActorMethod<[SessionToken, bigint], bigint>,
   'revokeVerifiedBadge' : ActorMethod<[SessionToken, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'sendCallRequest' : ActorMethod<[Principal], bigint>,
@@ -279,7 +287,10 @@ export interface _SERVICE {
   'sendSignal' : ActorMethod<[SessionToken, string, string, string], undefined>,
   'setCallTopic' : ActorMethod<[SessionToken, string], undefined>,
   'setMicActive' : ActorMethod<[SessionToken, boolean], undefined>,
+  'setTypingStatus' : ActorMethod<[SessionToken, string, boolean], undefined>,
+  'setUserEmail' : ActorMethod<[SessionToken, string], undefined>,
   'setUserStatus' : ActorMethod<[SessionToken, string], undefined>,
+  'trackCallActivity' : ActorMethod<[SessionToken], undefined>,
   'unbanLocalUser' : ActorMethod<[SessionToken, string], undefined>,
   'unblockUser' : ActorMethod<[SessionToken, string], undefined>,
   'unfollowUser' : ActorMethod<[SessionToken, string], undefined>,

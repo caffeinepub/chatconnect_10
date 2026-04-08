@@ -24,6 +24,7 @@ import type {
   ConversationSummary,
   DirectMessage,
   backendInterface as ExtendedBackend,
+  MessageReaction,
 } from "../backend.d";
 import { BottomNav } from "../components/BottomNav";
 import { GlobalCallWatcher } from "../components/GlobalCallWatcher";
@@ -37,6 +38,8 @@ const AVATAR_GRADIENTS = [
   "from-emerald-400 to-teal-500",
   "from-rose-400 to-purple-500",
 ];
+
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 function getGradient(str: string) {
   let hash = 0;
@@ -56,19 +59,83 @@ function relativeTime(timestamp: bigint): string {
 
 const VOICE_PREFIX = "[VOICE]:";
 
+function ReactionBubbles({
+  reactions,
+  myUsername,
+  onToggle,
+}: {
+  reactions: MessageReaction[];
+  myUsername: string;
+  onToggle: (emoji: string, hasReacted: boolean) => void;
+}) {
+  // Group by emoji
+  const grouped: Record<string, { count: number; hasMe: boolean }> = {};
+  for (const r of reactions) {
+    if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, hasMe: false };
+    grouped[r.emoji].count++;
+    if (r.reactorUsername === myUsername) grouped[r.emoji].hasMe = true;
+  }
+  const entries = Object.entries(grouped);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {entries.map(([emoji, { count, hasMe }]) => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => onToggle(emoji, hasMe)}
+          className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+            hasMe
+              ? "bg-primary/20 border-primary/40 text-primary"
+              : "bg-muted/60 border-border text-muted-foreground hover:border-primary/30"
+          }`}
+        >
+          {emoji} <span>{count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MessageBubble({
   msg,
   isMe,
   onDelete,
   canDelete,
+  onLongPress,
+  reactions,
+  myUsername,
+  onToggleReaction,
 }: {
   msg: DirectMessage;
   isMe: boolean;
   onDelete?: () => void;
   canDelete?: boolean;
+  onLongPress?: () => void;
+  reactions: MessageReaction[];
+  myUsername: string;
+  onToggleReaction: (emoji: string, hasReacted: boolean) => void;
 }) {
   const isVoice = msg.text.startsWith(VOICE_PREFIX);
   const voiceSrc = isVoice ? msg.text.slice(VOICE_PREFIX.length) : null;
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      onLongPress?.();
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleDoubleClick = () => {
+    onLongPress?.();
+  };
 
   if (isVoice && voiceSrc) {
     return (
@@ -83,7 +150,12 @@ function MessageBubble({
   }
 
   return (
-    <div className="group relative">
+    <div
+      className="group relative"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onDoubleClick={handleDoubleClick}
+    >
       <p className="text-sm leading-relaxed">{msg.text}</p>
       {canDelete && onDelete && (
         <button
@@ -96,6 +168,11 @@ function MessageBubble({
           <Trash2 className="h-2.5 w-2.5" />
         </button>
       )}
+      <ReactionBubbles
+        reactions={reactions}
+        myUsername={myUsername}
+        onToggle={onToggleReaction}
+      />
     </div>
   );
 }
@@ -112,7 +189,6 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  // isLoadingConvos stays true until actor is ready AND first fetch completes
   const [isLoadingConvos, setIsLoadingConvos] = useState(true);
   const [isMobileThread, setIsMobileThread] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -123,12 +199,20 @@ export default function MessagesPage() {
   const [pinnedMessage, setPinnedMessage] = useState<DirectMessage | null>(
     null,
   );
+  // Emoji reaction picker state
+  const [reactionPickerMsgId, setReactionPickerMsgId] = useState<bigint | null>(
+    null,
+  );
+  // Map msgId -> reactions
+  const [reactionsMap, setReactionsMap] = useState<
+    Record<string, MessageReaction[]>
+  >({});
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const actorReadyRef = useRef(false);
-  const isFetchingConvosRef = useRef(false); // debounce guard for concurrent fetchConversations
-  const isFetchingMsgsRef = useRef(false); // debounce guard for concurrent fetchMessages
-  const lastSelectedUserRef = useRef<string | null>(null); // track which user messages belong to
+  const isFetchingConvosRef = useRef(false);
+  const isFetchingMsgsRef = useRef(false);
+  const lastSelectedUserRef = useRef<string | null>(null);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -143,13 +227,6 @@ export default function MessagesPage() {
       navigate({ to: "/login" });
     }
   }, [sessionValidated, isLocalLoggedIn, navigate]);
-
-  // Track when actor becomes available
-  useEffect(() => {
-    if (extActor && !actorFetching) {
-      actorReadyRef.current = true;
-    }
-  }, [extActor, actorFetching]);
 
   // Check URL param for pre-selected user
   useEffect(() => {
@@ -179,20 +256,18 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [fetchOnline]);
 
-  // Fetch conversations — wait for actor to be ready before starting, keep loading true until then
+  // Fetch conversations
   const fetchConversations = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession) return;
-    if (!extActor || actorFetching) {
-      // Actor not ready; keep loading state until it becomes available
-      return;
-    }
-    // Debounce: skip if a fetch is already in flight
+    if (!extActor || actorFetching) return;
     if (isFetchingConvosRef.current) return;
     isFetchingConvosRef.current = true;
     try {
       const convos = await extActor.getConversations(localSession.token);
       setConversations(
-        [...convos].sort((a, b) => Number(b.lastTimestamp - a.lastTimestamp)),
+        [...convos].sort((a, b) =>
+          a.lastTimestamp < b.lastTimestamp ? 1 : -1,
+        ),
       );
     } catch (err) {
       console.error("[MessagesPage] fetchConversations failed:", err);
@@ -202,7 +277,6 @@ export default function MessagesPage() {
     }
   }, [isLocalLoggedIn, localSession, extActor, actorFetching]);
 
-  // Keep loading until actor is ready, then fetch
   useEffect(() => {
     if (!extActor || actorFetching) {
       setIsLoadingConvos(true);
@@ -216,15 +290,14 @@ export default function MessagesPage() {
   // Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!isLocalLoggedIn || !localSession || !extActor || !selectedUser) return;
-    if (isFetchingMsgsRef.current) return; // skip if already in flight
+    if (isFetchingMsgsRef.current) return;
     isFetchingMsgsRef.current = true;
-    const fetchingFor = selectedUser; // capture which user we're fetching for
+    const fetchingFor = selectedUser;
     try {
       const msgs = await extActor.getDirectMessages(
         localSession.token,
         selectedUser,
       );
-      // Discard result if user switched conversations while fetch was in flight
       if (lastSelectedUserRef.current !== fetchingFor) return;
       setMessages(
         [...msgs].sort((a, b) =>
@@ -276,16 +349,46 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
 
-  // Load pinned message
+  // Load pinned message — getPinnedMessage returns DirectMessage | null
   useEffect(() => {
     if (!selectedUser || !isLocalLoggedIn || !localSession || !extActor) return;
     extActor
       .getPinnedMessage(localSession.token, selectedUser)
       .then((msg: DirectMessage | null) => {
-        if (msg) setPinnedMessage(msg);
+        setPinnedMessage(msg ?? null);
       })
       .catch(() => {});
   }, [selectedUser, isLocalLoggedIn, localSession, extActor]);
+
+  // Fetch reactions for visible messages
+  const fetchReactionsForMessages = useCallback(
+    async (msgs: DirectMessage[]) => {
+      if (!extActor || !localSession || msgs.length === 0) return;
+      const newMap: Record<string, MessageReaction[]> = {};
+      await Promise.all(
+        msgs.map(async (msg) => {
+          try {
+            const reactions = await extActor.getMessageReactions(
+              localSession.token,
+              msg.id,
+            );
+            newMap[msg.id.toString()] = reactions;
+          } catch {
+            newMap[msg.id.toString()] = [];
+          }
+        }),
+      );
+      setReactionsMap((prev) => ({ ...prev, ...newMap }));
+    },
+    [extActor, localSession],
+  );
+
+  // Fetch reactions when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      fetchReactionsForMessages(messages.slice(-10)); // fetch for last 10 messages
+    }
+  }, [messages, fetchReactionsForMessages]);
 
   // Clean up voice preview URL on unmount
   useEffect(() => {
@@ -311,12 +414,13 @@ export default function MessagesPage() {
   const handleSelectUser = (username: string) => {
     setSelectedUser(username);
     lastSelectedUserRef.current = username;
-    isFetchingMsgsRef.current = false; // reset so new fetch fires immediately
+    isFetchingMsgsRef.current = false;
     setIsMobileThread(true);
     setMessages([]);
     setIsTyping(false);
     setPinnedMessage(null);
     setVoiceBlob(null);
+    setReactionPickerMsgId(null);
     if (voicePreviewUrl) {
       URL.revokeObjectURL(voicePreviewUrl);
       setVoicePreviewUrl(null);
@@ -341,16 +445,14 @@ export default function MessagesPage() {
       isRead: false,
     };
     setMessages((prev) => [...prev, optimistic]);
-    isFetchingMsgsRef.current = false; // allow fetch after send
+    isFetchingMsgsRef.current = false;
     setIsSending(true);
     try {
       await extActor.sendDirectMessage(localSession.token, selectedUser, text);
-      // Immediately fetch to replace optimistic with real message and update inbox list
-      isFetchingMsgsRef.current = false; // allow immediate re-fetch
+      isFetchingMsgsRef.current = false;
       await fetchMessages();
       await fetchConversations();
     } catch {
-      // Remove optimistic message on failure
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setMessageText(text);
     } finally {
@@ -364,7 +466,7 @@ export default function MessagesPage() {
       await extActor.deleteDirectMessage(localSession.token, msgId);
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     } catch {
-      // Ignore if API not available
+      // ignore
     }
   };
 
@@ -376,7 +478,70 @@ export default function MessagesPage() {
       if (msg) setPinnedMessage(msg);
       toast.success("Message pinned");
     } catch {
-      // Ignore if API not available
+      // ignore
+    }
+  };
+
+  const handleAddReaction = async (msgId: bigint, emoji: string) => {
+    if (!localSession || !extActor) return;
+    setReactionPickerMsgId(null);
+    try {
+      await extActor.addMessageReaction(localSession.token, msgId, emoji);
+      // Optimistic: add reaction locally
+      const key = msgId.toString();
+      const myUsername = localSession.username;
+      setReactionsMap((prev) => {
+        const existing = prev[key] ?? [];
+        // Avoid duplicates
+        if (
+          existing.some(
+            (r) => r.reactorUsername === myUsername && r.emoji === emoji,
+          )
+        )
+          return prev;
+        return {
+          ...prev,
+          [key]: [
+            ...existing,
+            {
+              emoji,
+              reactorUsername: myUsername,
+              timestamp: BigInt(Date.now()) * BigInt(1_000_000),
+            },
+          ],
+        };
+      });
+    } catch {
+      toast.error("Failed to add reaction");
+    }
+  };
+
+  const handleRemoveReaction = async (msgId: bigint, emoji: string) => {
+    if (!localSession || !extActor) return;
+    try {
+      await extActor.removeMessageReaction(localSession.token, msgId, emoji);
+      const key = msgId.toString();
+      const myUsername = localSession.username;
+      setReactionsMap((prev) => ({
+        ...prev,
+        [key]: (prev[key] ?? []).filter(
+          (r) => !(r.reactorUsername === myUsername && r.emoji === emoji),
+        ),
+      }));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleToggleReaction = async (
+    msgId: bigint,
+    emoji: string,
+    hasReacted: boolean,
+  ) => {
+    if (hasReacted) {
+      await handleRemoveReaction(msgId, emoji);
+    } else {
+      await handleAddReaction(msgId, emoji);
     }
   };
 
@@ -394,7 +559,6 @@ export default function MessagesPage() {
         setVoiceBlob(blob);
         const url = URL.createObjectURL(blob);
         setVoicePreviewUrl(url);
-        // Stop mic tracks
         for (const track of stream.getTracks()) track.stop();
       };
       recorder.start();
@@ -449,7 +613,6 @@ export default function MessagesPage() {
     }
   };
 
-  // Inbox calling
   const handleCallUser = async () => {
     if (!selectedUser || !localSession || !extActor || isCallSending) return;
     setIsCallSending(true);
@@ -655,7 +818,7 @@ export default function MessagesPage() {
                   onClick={() =>
                     navigate({
                       to: "/profile",
-                      search: { user: selectedUser } as any,
+                      search: { user: selectedUser } as Record<string, string>,
                     })
                   }
                   className="flex-1 text-left hover:opacity-80 transition-opacity"
@@ -740,6 +903,8 @@ export default function MessagesPage() {
                       const isMe =
                         msg.senderUsername === localSession?.username;
                       const isLast = idx === messages.length - 1;
+                      const msgReactions =
+                        reactionsMap[msg.id.toString()] ?? [];
                       return (
                         <motion.div
                           key={msg.id.toString()}
@@ -768,7 +933,37 @@ export default function MessagesPage() {
                               isMe={isMe}
                               canDelete={isMe}
                               onDelete={() => handleDeleteMessage(msg.id)}
+                              onLongPress={() =>
+                                setReactionPickerMsgId(
+                                  reactionPickerMsgId === msg.id
+                                    ? null
+                                    : msg.id,
+                                )
+                              }
+                              reactions={msgReactions}
+                              myUsername={localSession?.username ?? ""}
+                              onToggleReaction={(emoji, hasReacted) =>
+                                handleToggleReaction(msg.id, emoji, hasReacted)
+                              }
                             />
+                            {/* Emoji reaction picker */}
+                            {reactionPickerMsgId === msg.id && (
+                              <div className="flex gap-1.5 mt-2 flex-wrap">
+                                {REACTION_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() =>
+                                      handleAddReaction(msg.id, emoji)
+                                    }
+                                    className="text-base hover:scale-125 transition-transform active:scale-95"
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             <div
                               className={`flex items-center gap-1 mt-1 ${
                                 isMe ? "justify-end" : "justify-start"

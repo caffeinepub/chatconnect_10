@@ -209,6 +209,7 @@ function LocalCallingCard({
   const [editTopicOpen, setEditTopicOpen] = useState(false);
   const [topicInput, setTopicInput] = useState("");
   const [savingTopic, setSavingTopic] = useState(false);
+  const [userBadges, setUserBadges] = useState<string[]>([]);
   const isWildfireAdmin = user.username.toUpperCase() === "WILDFIRE";
 
   // Load initial follow/block state and follower counts
@@ -245,12 +246,14 @@ function LocalCallingCard({
       extActor.isUserVerified(user.username).catch(() => false),
       extActor.getUserStatus(user.username).catch(() => null),
       extActor.getCallTopic(user.username).catch(() => null),
-    ]).then(([bio, verified, status, topic]) => {
+      extActor.getUserBadges(user.username).catch(() => [] as string[]),
+    ]).then(([bio, verified, status, topic, badges]) => {
       if (cancelled) return;
       setUserBio(bio ? String(bio) : "");
       setIsVerified(Boolean(verified));
       setUserStatus(status ? String(status) : "");
       setCallTopic(topic ? String(topic) : "");
+      setUserBadges(badges ?? []);
     });
     return () => {
       cancelled = true;
@@ -339,7 +342,7 @@ function LocalCallingCard({
             )}
           </button>
           {isOnline && (
-            <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#0B102A]" />
+            <span className="absolute bottom-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-card" />
           )}
         </div>
 
@@ -413,6 +416,23 @@ function LocalCallingCard({
             <span className="text-white/80 text-xs italic leading-snug line-clamp-1">
               {callTopic}
             </span>
+          </div>
+        )}
+        {userBadges.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-center mb-2">
+            {userBadges.map((badge) => (
+              <span
+                key={badge}
+                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/20 text-amber-300 border border-amber-400/30"
+              >
+                {badge === "Active Caller"
+                  ? "📞"
+                  : badge === "Top Poster"
+                    ? "⭐"
+                    : "🏅"}{" "}
+                {badge}
+              </span>
+            ))}
           </div>
         )}
         {isMe && (

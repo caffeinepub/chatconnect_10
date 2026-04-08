@@ -1,0 +1,508 @@
+// Version: 3.0.0
+type CallRequest__925119736 =
+  {
+    callee : Principal;
+    caller : Principal;
+    id : Nat;
+    timestamp : Time__900049286
+  };
+type CallStatus__257941429 = {#accepted; #denied; #ended; #pending};
+type Comment__473346131 =
+  {
+    author : Principal;
+    authorName : Text;
+    id : Nat;
+    postId : Nat;
+    text : Text;
+    timestamp : Time__900049286
+  };
+type Data__159895909<T> = {var count : Nat__490723111; elements : [var ?T]};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type DirectMessage__546033946 =
+  {
+    id : Nat;
+    isRead : Bool;
+    recipientUsername : Text;
+    senderUsername : Text;
+    text : Text;
+    timestamp : Time__900049286
+  };
+type ExternalBlob__678159643 = Blob;
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__667636161<T> =
+  {children : [var ?Node__92254746<T>]; data : Data__159895909<T>};
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__520550824<T> = {data : Data__159895909<T>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type LocalCallRequest__723330501 =
+  {
+    calleeUsername : Text;
+    callerUsername : Text;
+    id : Nat;
+    status : CallStatus__257941429;
+    timestamp : Time__900049286
+  };
+type LocalUser__170524592 =
+  {
+    age : Nat;
+    displayName : Text;
+    lastNameChange : ?Time__900049286;
+    passwordHash : Text;
+    photo : ?ExternalBlob__678159643;
+    username : Text
+  };
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type MessageReaction__746841266 =
+  {emoji : Text; reactorUsername : Text; timestamp : Time__900049286};
+type Message__19119041 =
+  {
+    author : Principal;
+    authorName : Text;
+    id : Nat;
+    text : Text;
+    timestamp : Time__900049286
+  };
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type Node__92254746<T> =
+  {#internal : Internal__667636161<T>; #leaf : Leaf__520550824<T>};
+type NotificationType__754463539 = {#callRequest; #comment; #like};
+type Notification__879889657 =
+  {
+    actorName : Text;
+    callRequestId : ?Nat;
+    id : Nat;
+    isRead : Bool;
+    notifType : NotificationType__754463539;
+    postId : ?Nat;
+    postText : ?Text;
+    recipientUsername : Text;
+    timestamp : Time__900049286
+  };
+type OldAccessControlState__841599830 =
+  {
+    var adminAssigned : Bool;
+    userRoles : Map__605269027<Principal, OldUserRole__889293160>
+  };
+type OldUserRole__889293160 = {#admin; #guest; #user};
+type Post__955439577 =
+  {
+    author : Principal;
+    authorName : Text;
+    id : Nat;
+    text : Text;
+    timestamp : Time__900049286
+  };
+type ProfileSettings__717934101 =
+  {hideFollowers : Bool; hideFollowing : Bool};
+type SessionToken__529192381 = Nat;
+type Set__532252804<T> = Set__710576254<T>;
+type Set__710576254<T> =
+  {var root : Node__92254746<T>; var size : Nat__490723111};
+type Signal__95572332 =
+  {
+    data : Text;
+    fromUsername : Text;
+    id : Nat;
+    signalType : Text;
+    timestamp : Time__900049286;
+    toUsername : Text
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserRole__65417691 = {#admin; #guest; #user};
+type User__831686142 =
+  {
+    fname : Text;
+    name : Text;
+    photo : ?ExternalBlob__678159643;
+    principal : Principal;
+    role : UserRole__65417691;
+    telephone : Text
+  };
+type VoiceParticipant__185815895 =
+  {displayName : Text; isMicActive : Bool; username : Text};
+actor ({
+  stable acceptedCallIds :
+    {var root : Node__46230540<Nat, Bool>; var size : Nat__490723111};
+  in accessControlState : OldAccessControlState__841599830;
+  stable allowedEmojis : [Text];
+  stable banExpiry :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable bannedUsers :
+    {var root : Node__92254746<Text>; var size : Nat__490723111};
+  stable blockList :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable callRequests :
+    {
+      var root : Node__46230540<Nat, CallRequest__925119736>;
+      var size : Nat__490723111
+    };
+  stable callTopics :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable comments :
+    {
+      var root : Node__46230540<Nat, Comment__473346131>;
+      var size : Nat__490723111
+    };
+  stable conversationIndex :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable directMessages :
+    {
+      var root : Node__46230540<Nat, DirectMessage__546033946>;
+      var size : Nat__490723111
+    };
+  stable followers :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable following :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable lastSeen :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable likes :
+    {
+      var root : Node__46230540<Nat, Map__605269027<Principal, Text>>;
+      var size : Nat__490723111
+    };
+  stable localCallRequests :
+    {
+      var root : Node__46230540<Nat, LocalCallRequest__723330501>;
+      var size : Nat__490723111
+    };
+  stable localUsers :
+    {
+      var root : Node__46230540<Text, LocalUser__170524592>;
+      var size : Nat__490723111
+    };
+  stable messageReactions :
+    {
+      var root :
+        Node__46230540<Nat, Map__605269027<Text, MessageReaction__746841266>>;
+      var size : Nat__490723111
+    };
+  stable messages :
+    {
+      var root : Node__46230540<Nat, Message__19119041>;
+      var size : Nat__490723111
+    };
+  stable var nextDmId : Nat;
+  stable var nextId : Nat;
+  stable var nextNotificationId : Nat;
+  stable var nextSignalId : Nat;
+  stable var nextTokenId : Nat;
+  stable notifications :
+    {
+      var root : Node__46230540<Nat, Notification__879889657>;
+      var size : Nat__490723111
+    };
+  stable pinnedMessages :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable posts :
+    {
+      var root : Node__46230540<Nat, Post__955439577>;
+      var size : Nat__490723111
+    };
+  stable profileSettings :
+    {
+      var root : Node__46230540<Text, ProfileSettings__717934101>;
+      var size : Nat__490723111
+    };
+  stable profileVisitors :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable resharePostIds :
+    {var root : Node__46230540<Nat, Nat>; var size : Nat__490723111};
+  stable reshares :
+    {
+      var root : Node__46230540<Nat, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable sessions :
+    {
+      var root : Node__46230540<SessionToken__529192381, Text>;
+      var size : Nat__490723111
+    };
+  stable var stableBanExpiry : [(Text, Time__900049286)];
+  stable var stableBannedUsers : [Text];
+  stable var stableBlockList : [(Text, [Text])];
+  stable var stableCallTopics : [(Text, Text)];
+  stable var stableComments : [(Nat, Comment__473346131)];
+  stable var stableConversationIndex : [(Text, [Text])];
+  stable var stableDirectMessages : [(Nat, DirectMessage__546033946)];
+  stable var stableFollowers : [(Text, [Text])];
+  stable var stableFollowing : [(Text, [Text])];
+  stable var stableLastSeen : [(Text, Time__900049286)];
+  stable var stableLikesFlat : [(Nat, Text, Text)];
+  stable var stableLocalCallRequests : [(Nat, LocalCallRequest__723330501)];
+  stable var stableLocalUsers : [(Text, LocalUser__170524592)];
+  stable var stableMessageReactions :
+    [(Nat, [(Text, MessageReaction__746841266)])];
+  stable var stableMessages : [(Nat, Message__19119041)];
+  stable var stableNotifications : [(Nat, Notification__879889657)];
+  stable var stablePinnedMessages : [(Text, Nat)];
+  stable var stablePosts : [(Nat, Post__955439577)];
+  stable var stableProfileSettings : [(Text, ProfileSettings__717934101)];
+  stable var stableProfileVisitors : [(Text, [Text])];
+  stable var stableReshares : [(Nat, [Text])];
+  stable var stableSessions : [(Nat, Text)];
+  stable var stableTypingStatus : [(Text, Time__900049286)];
+  stable var stableUserBadges : [(Text, [Text])];
+  stable var stableUserBios : [(Text, Text)];
+  stable var stableUserCallCounts : [(Text, Nat)];
+  stable var stableUserEmails : [(Text, Text)];
+  stable var stableUserPostCounts : [(Text, Nat)];
+  stable var stableUserStatuses : [(Text, Text)];
+  stable var stableVerifiedUsers : [Text];
+  stable typingStatus :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable userBadges :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable userBios :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable userCallCounts :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable userEmails :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable userPostCounts :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable userStatuses :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable users :
+    {
+      var root : Node__46230540<Principal, User__831686142>;
+      var size : Nat__490723111
+    };
+  stable verifiedUsers :
+    {var root : Node__92254746<Text>; var size : Nat__490723111};
+  stable voiceParticipants :
+    {
+      var root : Node__46230540<Text, VoiceParticipant__185815895>;
+      var size : Nat__490723111
+    };
+  stable voiceSignals :
+    {
+      var root : Node__46230540<Nat, Signal__95572332>;
+      var size : Nat__490723111
+    }
+}, {
+  stable acceptedCallIds :
+    {var root : Node__46230540<Nat, Bool>; var size : Nat__490723111};
+  stable accessControlState :
+    {admins : Set__532252804<Principal>; users : Set__532252804<Principal>};
+  stable allowedEmojis : [Text];
+  stable banExpiry :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable bannedUsers :
+    {var root : Node__92254746<Text>; var size : Nat__490723111};
+  stable blockList :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable callRequests :
+    {
+      var root : Node__46230540<Nat, CallRequest__925119736>;
+      var size : Nat__490723111
+    };
+  stable callTopics :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable comments :
+    {
+      var root : Node__46230540<Nat, Comment__473346131>;
+      var size : Nat__490723111
+    };
+  stable conversationIndex :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable directMessages :
+    {
+      var root : Node__46230540<Nat, DirectMessage__546033946>;
+      var size : Nat__490723111
+    };
+  stable followers :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable following :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable lastSeen :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable likes :
+    {
+      var root : Node__46230540<Nat, Map__605269027<Principal, Text>>;
+      var size : Nat__490723111
+    };
+  stable localCallRequests :
+    {
+      var root : Node__46230540<Nat, LocalCallRequest__723330501>;
+      var size : Nat__490723111
+    };
+  stable localUsers :
+    {
+      var root : Node__46230540<Text, LocalUser__170524592>;
+      var size : Nat__490723111
+    };
+  stable messageReactions :
+    {
+      var root :
+        Node__46230540<Nat, Map__605269027<Text, MessageReaction__746841266>>;
+      var size : Nat__490723111
+    };
+  stable messages :
+    {
+      var root : Node__46230540<Nat, Message__19119041>;
+      var size : Nat__490723111
+    };
+  stable var nextDmId : Nat;
+  stable var nextId : Nat;
+  stable var nextNotificationId : Nat;
+  stable var nextSignalId : Nat;
+  stable var nextTokenId : Nat;
+  stable notifications :
+    {
+      var root : Node__46230540<Nat, Notification__879889657>;
+      var size : Nat__490723111
+    };
+  stable pinnedMessages :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable posts :
+    {
+      var root : Node__46230540<Nat, Post__955439577>;
+      var size : Nat__490723111
+    };
+  stable profileSettings :
+    {
+      var root : Node__46230540<Text, ProfileSettings__717934101>;
+      var size : Nat__490723111
+    };
+  stable profileVisitors :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable resharePostIds :
+    {var root : Node__46230540<Nat, Nat>; var size : Nat__490723111};
+  stable reshares :
+    {
+      var root : Node__46230540<Nat, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable sessions :
+    {
+      var root : Node__46230540<SessionToken__529192381, Text>;
+      var size : Nat__490723111
+    };
+  stable var stableBanExpiry : [(Text, Time__900049286)];
+  stable var stableBannedUsers : [Text];
+  stable var stableBlockList : [(Text, [Text])];
+  stable var stableCallTopics : [(Text, Text)];
+  stable var stableComments : [(Nat, Comment__473346131)];
+  stable var stableConversationIndex : [(Text, [Text])];
+  stable var stableDirectMessages : [(Nat, DirectMessage__546033946)];
+  stable var stableFollowers : [(Text, [Text])];
+  stable var stableFollowing : [(Text, [Text])];
+  stable var stableLastSeen : [(Text, Time__900049286)];
+  stable var stableLikesFlat : [(Nat, Text, Text)];
+  stable var stableLocalCallRequests : [(Nat, LocalCallRequest__723330501)];
+  stable var stableLocalUsers : [(Text, LocalUser__170524592)];
+  stable var stableMessageReactions :
+    [(Nat, [(Text, MessageReaction__746841266)])];
+  stable var stableMessages : [(Nat, Message__19119041)];
+  stable var stableNotifications : [(Nat, Notification__879889657)];
+  stable var stablePinnedMessages : [(Text, Nat)];
+  stable var stablePosts : [(Nat, Post__955439577)];
+  stable var stableProfileSettings : [(Text, ProfileSettings__717934101)];
+  stable var stableProfileVisitors : [(Text, [Text])];
+  stable var stableReshares : [(Nat, [Text])];
+  stable var stableSessions : [(Nat, Text)];
+  stable var stableTypingStatus : [(Text, Time__900049286)];
+  stable var stableUserBadges : [(Text, [Text])];
+  stable var stableUserBios : [(Text, Text)];
+  stable var stableUserCallCounts : [(Text, Nat)];
+  stable var stableUserEmails : [(Text, Text)];
+  stable var stableUserPostCounts : [(Text, Nat)];
+  stable var stableUserStatuses : [(Text, Text)];
+  stable var stableVerifiedUsers : [Text];
+  stable typingStatus :
+    {
+      var root : Node__46230540<Text, Time__900049286>;
+      var size : Nat__490723111
+    };
+  stable userBadges :
+    {
+      var root : Node__46230540<Text, Set__532252804<Text>>;
+      var size : Nat__490723111
+    };
+  stable userBios :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable userCallCounts :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable userEmails :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable userPostCounts :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable userStatuses :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable users :
+    {
+      var root : Node__46230540<Principal, User__831686142>;
+      var size : Nat__490723111
+    };
+  stable verifiedUsers :
+    {var root : Node__92254746<Text>; var size : Nat__490723111};
+  stable voiceParticipants :
+    {
+      var root : Node__46230540<Text, VoiceParticipant__185815895>;
+      var size : Nat__490723111
+    };
+  stable voiceSignals :
+    {
+      var root : Node__46230540<Nat, Signal__95572332>;
+      var size : Nat__490723111
+    }
+}) ;

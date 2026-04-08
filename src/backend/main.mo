@@ -1,7 +1,3 @@
-import MixinStorage "blob-storage/Mixin";
-import MixinAuthorization "authorization/MixinAuthorization";
-import AccessControl "authorization/access-control";
-import Storage "blob-storage/Storage";
 import Iter "mo:core/Iter";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
@@ -11,7 +7,11 @@ import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Array "mo:core/Array";
 import Set "mo:core/Set";
+import AccessControl "AccessControl";
+import Storage "Storage";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   type SessionToken = Nat;
   type NotificationType = { #like; #comment; #callRequest };
@@ -157,9 +157,6 @@ actor {
     hideFollowers : Bool;
     hideFollowing : Bool;
   };
-
-  include MixinStorage();
-  include MixinAuthorization(accessControlState);
 
   let users = Map.empty<Principal, User>();
   let localUsers = Map.empty<Text, LocalUser>();
@@ -1003,6 +1000,13 @@ actor {
       timestamp = Time.now();
     };
     posts.add(id, post);
+    // Track post count for activity badges
+    let currentCount = switch (userPostCounts.get(username)) {
+      case (?c) { c };
+      case (null) { 0 };
+    };
+    userPostCounts.add(username, currentCount + 1);
+    checkAndAwardBadges(username);
     id;
   };
 
@@ -2124,6 +2128,185 @@ actor {
     userStatuses.get(username);
   };
 
+  // ---- Message Emoji Reactions ----
+
+  type MessageReaction = {
+    emoji : Text;
+    reactorUsername : Text;
+    timestamp : Time.Time;
+  };
+
+  let messageReactions = Map.empty<Nat, Map.Map<Text, MessageReaction>>(); // msgId -> (reactorUsername -> reaction)
+
+  let allowedEmojis : [Text] = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+
+  public shared func addMessageReaction(token : SessionToken, msgId : Nat, emoji : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    // Validate emoji
+    let valid = allowedEmojis.find(func(e : Text) : Bool { e == emoji });
+    if (valid == null) {
+      Runtime.trap("Invalid emoji. Allowed: 👍 ❤️ 😂 😮 😢 🔥");
+    };
+    // Verify message exists
+    if (not directMessages.containsKey(msgId)) {
+      Runtime.trap("Message not found");
+    };
+    let reactionMap = switch (messageReactions.get(msgId)) {
+      case (?m) { m };
+      case (null) {
+        let m = Map.empty<Text, MessageReaction>();
+        messageReactions.add(msgId, m);
+        m;
+      };
+    };
+    let reaction : MessageReaction = {
+      emoji;
+      reactorUsername = username;
+      timestamp = Time.now();
+    };
+    reactionMap.add(username, reaction);
+  };
+
+  public shared func removeMessageReaction(token : SessionToken, msgId : Nat, emoji : Text) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    switch (messageReactions.get(msgId)) {
+      case (?reactionMap) {
+        switch (reactionMap.get(username)) {
+          case (?r) {
+            if (r.emoji == emoji) {
+              reactionMap.remove(username);
+            };
+          };
+          case (null) {};
+        };
+      };
+      case (null) {};
+    };
+  };
+
+  public query func getMessageReactions(token : SessionToken, msgId : Nat) : async [MessageReaction] {
+    let _username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return [] };
+    };
+    switch (messageReactions.get(msgId)) {
+      case (?reactionMap) { reactionMap.values().toArray() };
+      case (null) { [] };
+    };
+  };
+
+  // ---- Activity Badges ----
+
+  let userCallCounts = Map.empty<Text, Nat>();
+  let userPostCounts = Map.empty<Text, Nat>();
+  let userBadges = Map.empty<Text, Set.Set<Text>>();
+
+  func checkAndAwardBadges(username : Text) {
+    let badges = switch (userBadges.get(username)) {
+      case (?b) { b };
+      case (null) {
+        let b = Set.empty<Text>();
+        userBadges.add(username, b);
+        b;
+      };
+    };
+    let callCount = switch (userCallCounts.get(username)) {
+      case (?c) { c };
+      case (null) { 0 };
+    };
+    let postCount = switch (userPostCounts.get(username)) {
+      case (?c) { c };
+      case (null) { 0 };
+    };
+    if (callCount >= 10) { badges.add("Active Caller") };
+    if (postCount >= 20) { badges.add("Top Poster") };
+    userBadges.add(username, badges);
+  };
+
+  public shared func trackCallActivity(token : SessionToken) : async () {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { return };
+    };
+    let current = switch (userCallCounts.get(username)) {
+      case (?c) { c };
+      case (null) { 0 };
+    };
+    userCallCounts.add(username, current + 1);
+    checkAndAwardBadges(username);
+  };
+
+  public query func getUserBadges(username : Text) : async [Text] {
+    switch (userBadges.get(username)) {
+      case (?b) { b.toArray() };
+      case (null) { [] };
+    };
+  };
+
+  // ---- Post Sharing/Reposting ----
+
+  let reshares = Map.empty<Nat, Set.Set<Text>>(); // postId -> set of usernames who reshared
+  let resharePostIds = Map.empty<Nat, Nat>(); // new post id -> original post id
+
+  public shared func resharePost(token : SessionToken, originalPostId : Nat) : async Nat {
+    let username = switch (validateToken(token)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Unauthorized: Invalid session token") };
+    };
+    let localUser = switch (localUsers.get(username)) {
+      case (?u) { u };
+      case (null) { Runtime.trap("Local user not found") };
+    };
+    let originalPost = switch (posts.get(originalPostId)) {
+      case (?p) { p };
+      case (null) { Runtime.trap("Original post not found") };
+    };
+    // Track who reshared
+    let reshareSet = switch (reshares.get(originalPostId)) {
+      case (?s) { s };
+      case (null) {
+        let s = Set.empty<Text>();
+        reshares.add(originalPostId, s);
+        s;
+      };
+    };
+    reshareSet.add(username);
+    // Create a new post as the reshare (prefixed text)
+    let newId = nextId;
+    nextId += 1;
+    let reshareText = "🔁 " # localUser.displayName # " reshared:\n" # originalPost.text;
+    let newPost : Post = {
+      id = newId;
+      author = getLocalUserPrincipal(username);
+      authorName = localUser.displayName;
+      text = reshareText;
+      timestamp = Time.now();
+    };
+    posts.add(newId, newPost);
+    resharePostIds.add(newId, originalPostId);
+    // Increment post count for badges
+    let current = switch (userPostCounts.get(username)) {
+      case (?c) { c };
+      case (null) { 0 };
+    };
+    userPostCounts.add(username, current + 1);
+    checkAndAwardBadges(username);
+    newId;
+  };
+
+  public query func getReshareCount(postId : Nat) : async Nat {
+    switch (reshares.get(postId)) {
+      case (?s) { s.size() };
+      case (null) { 0 };
+    };
+  };
+
   // ===== STABLE MEMORY (persists across upgrades) =====
 
   stable var stableLocalUsers : [(Text, LocalUser)] = [];
@@ -2151,6 +2334,11 @@ actor {
   stable var stablePinnedMessages : [(Text, Nat)] = [];
   stable var stableTypingStatus : [(Text, Time.Time)] = [];
   stable var stableUserEmails : [(Text, Text)] = [];
+  stable var stableMessageReactions : [(Nat, [(Text, MessageReaction)])] = [];
+  stable var stableUserCallCounts : [(Text, Nat)] = [];
+  stable var stableUserPostCounts : [(Text, Nat)] = [];
+  stable var stableUserBadges : [(Text, [Text])] = [];
+  stable var stableReshares : [(Nat, [Text])] = [];
 
   system func preupgrade() {
     stableLocalUsers := localUsers.entries().toArray();
@@ -2198,6 +2386,24 @@ actor {
     stablePinnedMessages := pinnedMessages.entries().toArray();
     stableTypingStatus := typingStatus.entries().toArray();
     stableUserEmails := userEmails.entries().toArray();
+    // Serialize message reactions
+    var tmpMsgReactions : [(Nat, [(Text, MessageReaction)])] = [];
+    for ((msgId, reactionMap) in messageReactions.entries()) {
+      tmpMsgReactions := tmpMsgReactions.concat([(msgId, reactionMap.entries().toArray())]);
+    };
+    stableMessageReactions := tmpMsgReactions;
+    stableUserCallCounts := userCallCounts.entries().toArray();
+    stableUserPostCounts := userPostCounts.entries().toArray();
+    var tmpUserBadges : [(Text, [Text])] = [];
+    for ((k, v) in userBadges.entries()) {
+      tmpUserBadges := tmpUserBadges.concat([(k, v.toArray())]);
+    };
+    stableUserBadges := tmpUserBadges;
+    var tmpReshares : [(Nat, [Text])] = [];
+    for ((k, v) in reshares.entries()) {
+      tmpReshares := tmpReshares.concat([(k, v.toArray())]);
+    };
+    stableReshares := tmpReshares;
     // Flatten likes: (postId, principal.toText(), displayName)
     var flatLikes : [(Nat, Text, Text)] = [];
     for ((postId, likeMap) in likes.entries()) {
@@ -2256,6 +2462,31 @@ actor {
     stableTypingStatus := [];
     for ((k, v) in stableUserEmails.values()) { userEmails.add(k, v) };
     stableUserEmails := [];
+    // Restore message reactions
+    for ((msgId, reactionsArr) in stableMessageReactions.values()) {
+      let reactionMap = Map.empty<Text, MessageReaction>();
+      for ((reactorUsername, reaction) in reactionsArr.values()) {
+        reactionMap.add(reactorUsername, reaction);
+      };
+      messageReactions.add(msgId, reactionMap);
+    };
+    stableMessageReactions := [];
+    for ((k, v) in stableUserCallCounts.values()) { userCallCounts.add(k, v) };
+    stableUserCallCounts := [];
+    for ((k, v) in stableUserPostCounts.values()) { userPostCounts.add(k, v) };
+    stableUserPostCounts := [];
+    for ((k, arr) in stableUserBadges.values()) {
+      let s = Set.empty<Text>();
+      for (b in arr.values()) { s.add(b) };
+      userBadges.add(k, s);
+    };
+    stableUserBadges := [];
+    for ((k, arr) in stableReshares.values()) {
+      let s = Set.empty<Text>();
+      for (u in arr.values()) { s.add(u) };
+      reshares.add(k, s);
+    };
+    stableReshares := [];
     // Restore likes
     for ((postId, principalText, name) in stableLikesFlat.values()) {
       let p = Principal.fromText(principalText);

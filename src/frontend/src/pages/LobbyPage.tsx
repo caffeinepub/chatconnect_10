@@ -79,6 +79,8 @@ export default function LobbyPage() {
   const queryClient = useQueryClient();
   const [messageText, setMessageText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   const { data: myProfile, isLoading: profileLoading } =
     useGetCallerUserProfile();
@@ -149,11 +151,28 @@ export default function LobbyPage() {
       navigate({ to: "/setup" });
   }, [identity, profileLoading, myProfile, navigate]);
 
-  // Scroll to bottom on new messages (dep is intentionally empty - we run on every render deliberately)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional scroll on message change
+  // Scroll to bottom only when a NEW message is added AND user is near the bottom
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — only run on message count change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [localMessages]);
+    const container = scrollContainerRef.current;
+    const end = messagesEndRef.current;
+    if (!end) return;
+    const messageCount = isLocalLoggedIn
+      ? localMessages.length
+      : iiMessages.length;
+    const isNewMessage = messageCount > prevMessageCountRef.current;
+    prevMessageCountRef.current = messageCount;
+    if (!isNewMessage) return;
+    if (!container) {
+      end.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom <= 100) {
+      end.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [isLocalLoggedIn, localMessages.length, iiMessages.length]);
 
   const messages = isLocalLoggedIn ? localMessages : iiMessages;
 
@@ -480,7 +499,10 @@ export default function LobbyPage() {
 
           {/* Chat messages — scrollable middle section */}
           <main className="flex-1 flex flex-col overflow-hidden">
-            <ScrollArea className="flex-1 px-4 py-4">
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 px-4 py-4 overflow-y-auto"
+            >
               <AnimatePresence initial={false}>
                 {sortedMessages.length === 0 ? (
                   <div
@@ -563,7 +585,7 @@ export default function LobbyPage() {
                 )}
               </AnimatePresence>
               <div ref={messagesEndRef} />
-            </ScrollArea>
+            </div>
 
             {/* ── BOTTOM CONTROLS ─────────────────────────────────── */}
             <div
