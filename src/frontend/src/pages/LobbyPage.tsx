@@ -174,17 +174,38 @@ export default function LobbyPage() {
     }
   }, [isLocalLoggedIn, localMessages.length, iiMessages.length]);
 
-  const messages = isLocalLoggedIn ? localMessages : iiMessages;
+  const allMessages = isLocalLoggedIn ? localMessages : iiMessages;
+
+  // Filter messages to only those belonging to this room.
+  // Lobby (no room param) shows untagged messages. Specific rooms show [room:id]-tagged ones.
+  const filteredMessages = allMessages.filter((msg) => {
+    const roomTag = `[room:${roomId}]`;
+    if (roomId === "lobby") {
+      // Show only messages NOT tagged with any room prefix
+      return !msg.text.startsWith("[room:");
+    }
+    return msg.text.startsWith(roomTag);
+  });
+
+  // Strip the room prefix from message text for display
+  const displayText = (msg: Message): string => {
+    const roomTag = `[room:${roomId}]`;
+    return msg.text.startsWith(roomTag)
+      ? msg.text.slice(roomTag.length)
+      : msg.text;
+  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim()) return;
     const text = messageText;
     setMessageText("");
+    // Tag the message with roomId so rooms stay isolated
+    const taggedText = roomId !== "lobby" ? `[room:${roomId}]${text}` : text;
     if (isLocalLoggedIn && localSession && extActor) {
       setIsSendingLocal(true);
       try {
-        await extActor.sendMessageAsLocal(localSession.token, text);
+        await extActor.sendMessageAsLocal(localSession.token, taggedText);
         const msgs = await extActor.getMessagesAsLocal(localSession.token);
         setLocalMessages(msgs);
       } catch {
@@ -195,7 +216,7 @@ export default function LobbyPage() {
       }
     } else {
       try {
-        await sendMessageII.mutateAsync(text);
+        await sendMessageII.mutateAsync(taggedText);
       } catch {
         toast.error("Failed to send message");
         setMessageText(text);
@@ -238,7 +259,7 @@ export default function LobbyPage() {
     );
   };
 
-  const sortedMessages = [...messages].sort((a, b) =>
+  const sortedMessages = [...filteredMessages].sort((a, b) =>
     a.timestamp < b.timestamp ? -1 : 1,
   );
 
@@ -575,7 +596,7 @@ export default function LobbyPage() {
                                   : {}
                               }
                             >
-                              {msg.text}
+                              {displayText(msg)}
                             </div>
                           </div>
                         </motion.div>

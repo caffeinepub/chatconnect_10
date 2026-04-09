@@ -9,9 +9,9 @@ import Array "mo:core/Array";
 import Set "mo:core/Set";
 import AccessControl "AccessControl";
 import Storage "Storage";
-import Migration "migration";
 
-(with migration = Migration.run)
+
+
 actor {
   type SessionToken = Nat;
   type NotificationType = { #like; #comment; #callRequest };
@@ -632,12 +632,18 @@ actor {
     if (areUsersBlocked(username, otherUsername)) {
       return [];
     };
-    directMessages.values().toArray().filter(
+    let filtered = directMessages.values().toArray().filter(
       func(dm : DirectMessage) : Bool {
         (dm.senderUsername == username and dm.recipientUsername == otherUsername) or
         (dm.senderUsername == otherUsername and dm.recipientUsername == username)
       }
     );
+    // Sort ascending by timestamp (oldest first) using safe Int comparison
+    filtered.sort(func(a : DirectMessage, b : DirectMessage) : { #less; #equal; #greater } {
+      if (a.timestamp < b.timestamp) { #less }
+      else if (a.timestamp > b.timestamp) { #greater }
+      else { #equal }
+    });
   };
 
   public query func getConversations(token : SessionToken) : async [ConversationSummary] {
@@ -694,7 +700,12 @@ actor {
           lastMessageIsRead = lastRead;
         };
       }
-    );
+    ).sort(func(a : ConversationSummary, b : ConversationSummary) : { #less; #equal; #greater } {
+      // Sort descending: most recent conversation first
+      if (a.lastTimestamp > b.lastTimestamp) { #less }
+      else if (a.lastTimestamp < b.lastTimestamp) { #greater }
+      else { #equal }
+    });
   };
 
   public shared func markDirectMessagesRead(token : SessionToken, otherUsername : Text) : async () {
@@ -2548,6 +2559,10 @@ actor {
     stablePinnedMessages := [];
     stableTypingStatus := [];
     stableUserEmails := [];
+    stableFollowers := [];
+    stableFollowing := [];
+    stableConversationIndex := [];
+    stableBlockList := [];
   };
 
 

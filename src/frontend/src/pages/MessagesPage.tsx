@@ -288,32 +288,38 @@ export default function MessagesPage() {
   }, [fetchConversations, extActor, actorFetching]);
 
   // Fetch messages
-  const fetchMessages = useCallback(async () => {
-    if (!isLocalLoggedIn || !localSession || !extActor || !selectedUser) return;
-    if (isFetchingMsgsRef.current) return;
-    isFetchingMsgsRef.current = true;
-    const fetchingFor = selectedUser;
-    try {
-      const msgs = await extActor.getDirectMessages(
-        localSession.token,
-        selectedUser,
-      );
-      if (lastSelectedUserRef.current !== fetchingFor) return;
-      setMessages(
-        [...msgs].sort((a, b) =>
-          a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
-        ),
-      );
-      setTimeout(
-        () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
-        50,
-      );
-    } catch (err) {
-      console.error("[MessagesPage] fetchMessages failed:", err);
-    } finally {
-      isFetchingMsgsRef.current = false;
-    }
-  }, [isLocalLoggedIn, localSession, extActor, selectedUser]);
+  const fetchMessages = useCallback(
+    async (force = false) => {
+      if (!isLocalLoggedIn || !localSession || !extActor || !selectedUser)
+        return;
+      if (!force && isFetchingMsgsRef.current) return;
+      isFetchingMsgsRef.current = true;
+      // Capture target before async so we can detect stale results
+      const fetchingFor = selectedUser;
+      try {
+        const msgs = await extActor.getDirectMessages(
+          localSession.token,
+          fetchingFor,
+        );
+        // Discard if user switched while waiting
+        if (lastSelectedUserRef.current !== fetchingFor) return;
+        setMessages(
+          [...msgs].sort((a, b) =>
+            a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+          ),
+        );
+        setTimeout(
+          () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
+          50,
+        );
+      } catch (err) {
+        console.error("[MessagesPage] fetchMessages failed:", err);
+      } finally {
+        isFetchingMsgsRef.current = false;
+      }
+    },
+    [isLocalLoggedIn, localSession, extActor, selectedUser],
+  );
 
   useEffect(() => {
     if (!selectedUser) return;
@@ -445,13 +451,12 @@ export default function MessagesPage() {
       isRead: false,
     };
     setMessages((prev) => [...prev, optimistic]);
-    isFetchingMsgsRef.current = false;
     setIsSending(true);
     try {
       await extActor.sendDirectMessage(localSession.token, selectedUser, text);
-      isFetchingMsgsRef.current = false;
-      await fetchMessages();
-      await fetchConversations();
+      // Force fetch to bypass the concurrency guard — we NEED the confirmed messages now
+      await fetchMessages(true);
+      fetchConversations();
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setMessageText(text);
@@ -594,7 +599,7 @@ export default function MessagesPage() {
           URL.revokeObjectURL(voicePreviewUrl);
           setVoicePreviewUrl(null);
         }
-        await fetchMessages();
+        await fetchMessages(true);
         fetchConversations();
         setIsSending(false);
       };
